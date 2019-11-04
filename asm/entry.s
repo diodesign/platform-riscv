@@ -13,7 +13,7 @@
 
 # hypervisor constants, such as global variable and lock locations
 # check this file for static hypervisor data layout
-.include "src/platform/riscv/asm/consts.s"
+.include "src/platform-riscv/asm/consts.s"
 
 # typical hardware physical memory map
 # 0x00000000, size: 0x100:     Debug ROM/data

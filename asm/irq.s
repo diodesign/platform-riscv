@@ -14,7 +14,7 @@
 .global irq_machine_handler
 
 # hypervisor constants, such as stack and lock locations
-.include "src/platform/riscv/asm/consts.s"
+.include "src/platform-riscv/asm/consts.s"
 
 # set up boot interrupt handling on this core so we can catch
 # exceptions while the system is initializating

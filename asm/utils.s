@@ -12,15 +12,9 @@
 .global platform_save_supervisor_state
 .global platform_load_supervisor_state
 .global platform_set_supervisor_return
-.global platform_cpu_wait
 
 # hypervisor constants, such as stack and lock locations
-.include "src/platform/riscv/asm/consts.s"
-
-# needed to prevent loops from being optimized away 
-platform_cpu_wait:
-  add x0, x0, x0
-  ret
+.include "src/platform-riscv/asm/consts.s"
 
 # return pointer to this CPU's private variables
 # <= a0 = pointer to hypervisor's CPU structure

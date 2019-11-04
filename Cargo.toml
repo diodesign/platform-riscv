@@ -5,5 +5,5 @@ authors = ["Chris Williams <diodesign@tuta.io>"]
 license = "MIT"
 edition = "2018"
 
-[dependencies]
-hermit-dtb = { path = "../../contrib/hermit-dtb" }
+[dependencies.dtb]
+path = "../dtb"

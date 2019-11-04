@@ -40,7 +40,6 @@ pub fn tlb_flush()
     }
 }
 
-
 /* allowed physical memory access permissions for supervisor kernels */
 #[derive(Debug)]
 pub enum AccessPermissions
@@ -123,7 +122,7 @@ pub struct RAMAreaIter
 {
     total_area: RAMArea, /* describes the entire physical RAM block */
     hypervisor_area: RAMArea, /* describes RAM reserved by the hypervisor */
-    pos: PhysMemBase /* current possition of the iterator into the total_area block */
+    pos: PhysMemBase /* current position of the iterator into the total_area block */
 }
 
 impl Iterator for RAMAreaIter
@@ -183,40 +182,24 @@ impl Iterator for RAMAreaIter
     }
 }
 
-/* obtain available physical memory details from system device tree. this assumes RISC-V systems have a single
-   block of physical RAM. If this changes, then we need to add support for that. break up this block of physical RAM
-   into one or more areas, skipping any physical RAM being used to store for the hypervisor, its data structures
-   and boot payload to ensure this memory isn't reused for allocations.
-=> device_tree_buf = device tree to parse
-<= iterator that describes the available blocks of physical RAM, or None for failure */
-pub fn available_ram(device_tree_buf: &u8) -> Option<RAMAreaIter>
+/* Iterate over a block of RAM, skipping the hypervisor, its boot capsule, and any per-CPU core data structures,
+   and returning just blocks of RAM that can be allocated and used by capsules and the hypervisor as needed.
+   In other words, pass a RAMArea of physical memory, and this will return an iterator of allocatable memory blocks
+    => cpu_count = number of physical CPU cores present in the machine
+       phys_ram_block = RAMArea describing this block of physical RAM
+    <= iterator that describes the available blocks of physical RAM, or None for failure */
+pub fn validate_ram(cpu_count: usize, phys_ram_block: RAMArea) -> Option<RAMAreaIter>
 {
-    /* at the end of the hypervisor footprint is the per-cpu heaps in one long contiguous block.
-    take this into account so the memory isn't reused for other allocations */
-    let cpu_count = match crate::devicetree::get_cpu_count(device_tree_buf)
-    {
-        Some(c) => c,
-        None => return None
-    };
-
     /* we'll assume the hypervisor, data, code, per-CPU heaps, and its boot payload are in a contiguous block of physical RAM */
     let (phys_hypervisor_start, phys_hypervisor_end) = hypervisor_footprint(cpu_count);
     let phys_hypervisor_size = (phys_hypervisor_end - phys_hypervisor_start) as PhysMemSize;
-
-    /* assumes RISC-V systems sport a single block of physical RAM for software use */
-    let all_phys_ram = match crate::devicetree::get_ram_area(device_tree_buf)
-    {
-        Some(a) => a,
-        None => return None
-    
-    };
 
     /* return an iterator the higher level hypervisor can run through. this cuts the physical RAM
     block up into sections that do not contain the hypervisor footprint */
     return Some(RAMAreaIter
     {
-        pos: all_phys_ram.base,
-        total_area: all_phys_ram,
+        pos: phys_ram_block.base,
+        total_area: phys_ram_block,
         hypervisor_area: RAMArea
         {
             base: phys_hypervisor_start, 
@@ -236,8 +219,8 @@ pub fn boot_supervisor() -> (PhysMemBase, PhysMemEnd)
 /* return the (start address, end address) of the whole hypervisor's code and data in physical memory,
    this must include the boot capsule supervisor and fixed per-CPU core private memory areas.
    note! the boot capsule supervisor is linked within the hypervisor's final executable. 
-=> cpu_count = number of CPU cores
-<= base and end addresses of the hypervisor footprint */
+    => cpu_count = number of CPU cores
+    <= base and end addresses of the hypervisor footprint */
 fn hypervisor_footprint(cpu_count: usize) -> (PhysMemBase, PhysMemEnd)
 {
     /* derived from the .sshared linker section */

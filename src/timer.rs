@@ -7,45 +7,57 @@
 
 extern "C"
 {
-    fn platform_timer_target(target: u64);
     fn platform_timer_irq_enable();
-    fn platform_timer_now() -> u64;
+    fn platform_timer_target(target: u64, clint_base: usize);
+    fn platform_timer_now(clint_base: usize) -> u64;
 }
 
-/* write once during init, read-only after */
-static mut CPU_TIMER_FREQ: usize = 0;
+/* divide timer frequency down into ticks per microsecond */
+const MILLION: u64 = 1000000;
 
-/* initialize timer for preemptive scheduler */ 
-pub fn init(device_tree_buf: &u8) -> bool
+/* describe a per-CPU core timer */
+pub struct Timer
 {
-    match crate::devicetree::get_timebase_freq(device_tree_buf)
+    clint_base: usize, /* base MMIO address of system's CLINT IO controller */
+    frequency: u64,    /* rate at which timer is incremented */
+}
+
+impl Timer
+{
+    /* create a new per-CPU core timer that increments a counter
+       every timer tick. when the timer exceeds a target value, an IRQ is raised.
+       => frequency = rate at which this timer counter increments
+          clint_base = base MMIO address of the CLINT controlling this timer 
+       <= per-CPU core timer object */
+    pub fn new(frequency: u64, clint_base: usize) -> Timer
     {
-        Some(f) =>
+        Timer
         {
-            unsafe { CPU_TIMER_FREQ = f; }
-            return true;
-        },
-        None => return false
+            clint_base: clint_base,
+            frequency: frequency
+        }
     }
-}
 
-/* enable per-CPU core incremental timer interrupt */
-pub fn start()
-{
-    /* zero means trigger timer right away */
-    next(0);
-    /* and throw the switch... */
-    unsafe { platform_timer_irq_enable(); }
-}
+    /* return base MMIO address of timer */
+    pub fn get_mmio_base(&self) -> usize { self.clint_base }
 
-/* return the current incremental timer value */
-pub fn now() -> u64
-{
-    unsafe { platform_timer_now() }
-}
+    /* return frequency of timer */
+    pub fn get_frequency(&self) -> u64 { self.frequency }
 
-/* set the new timer interrupt target value */
-pub fn next(target: u64)
-{
-    unsafe { platform_timer_target(target); }
+    /* enable this CPU core's incremental timer interrupt */
+    pub fn start(&self)
+    {
+        /* zero means trigger timer right away */
+        self.next(0);
+        /* and throw the switch... */
+        unsafe { platform_timer_irq_enable(); }
+    }
+
+    /* define duration until this CPU core's timer next triggers an IRQ.
+       => usecs = number of microseconds (millionths of a second) from now to interrupt */
+    pub fn next(&self, usecs: u64)
+    {
+        let target = ((self.frequency / MILLION) * usecs) + unsafe { platform_timer_now(self.clint_base) };
+        unsafe { platform_timer_target(target, self.clint_base); }
+    }
 }
