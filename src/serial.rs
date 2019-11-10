@@ -9,11 +9,12 @@ use core::ptr::write_volatile;
 
 /* serial port controller registers, relative to the base address */
 const TXDATA: usize = 0x0;     /* write a byte here to transmit it over the port */
-const TXCTRL: usize = 0x8;     /* transmission control register */
 
-const TXCTRL_ENABLE: u32 = 1 << 0; /* bit 0 of TXCTRL = 1 to enable transmission */
+//const TXCTRL: usize = 0x8;     /* transmission control register */
+//const TXCTRL_ENABLE: u32 = 1 << 0; /* bit 0 of TXCTRL = 1 to enable transmission */
 
 /* define a standard serial port input/output device */
+#[derive(Clone, Copy)]
 pub struct SerialPort
 {
     base: usize /* base MMIO address of the serial port controller */
@@ -27,7 +28,7 @@ impl SerialPort
     pub fn new(base_addr: usize) -> SerialPort
     {
         /* enable tx by setting bit TXCTRL_ENABLE to 1 */
-        unsafe { write_volatile((base_addr + TXCTRL) as *mut u32, TXCTRL_ENABLE); }
+        // unsafe { write_volatile((base_addr + TXCTRL) as *mut u32, TXCTRL_ENABLE); }
 
         SerialPort
         {
@@ -60,4 +61,47 @@ impl SerialPort
     {
         None
     }
+}
+
+/* hard-coded debugging on Qemu platform */
+use core::fmt;
+
+#[macro_export]
+macro_rules! qprintln
+{
+    ($fmt:expr) => (qprint!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => (qprint!(concat!($fmt, "\n"), $($arg)*));
+}
+
+#[macro_export]
+macro_rules! qprint
+{
+    ($($arg:tt)*) =>
+    ({
+        use core::fmt::Write;
+        {
+            unsafe { $crate::serial::QEMUUART.write_fmt(format_args!($($arg)*)).unwrap(); }
+        }
+    });
+}
+
+/* create a generic debug console writer */
+pub struct SerialWriter;
+pub static mut QEMUUART: SerialWriter = SerialWriter {};
+
+impl fmt::Write for SerialWriter
+{
+    fn write_str(&mut self, s: &str) -> fmt::Result
+    {
+        for c in s.bytes()
+        {
+            unsafe { *(0x10000000 as *mut u8) = c };
+        }
+        Ok(())
+    }
+}
+
+pub fn emergency_debug_write(msg: &str)
+{
+    qprint!("{}", msg);    
 }

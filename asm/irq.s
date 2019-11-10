@@ -17,7 +17,8 @@
 .include "src/platform-riscv/asm/consts.s"
 
 # set up boot interrupt handling on this core so we can catch
-# exceptions while the system is initializating
+# exceptions while the system is initializating.
+# also enable hardware interrupts.
 # <= corrupts t0
 irq_early_init:
   # point core at default machine-level exception/interrupt handler
@@ -30,9 +31,8 @@ irq_early_init:
   li    t0, 1 << 8        # bit 8 = usermode ecall (as per mcause)
   csrrw x0, medeleg, t0
 
-  # enable interrupts: set bit 3 in mstatus to enable machine irqs (MIE)
-  # since all hardware interrupts are disabled, we're only enabling
-  # exceptions at this point.
+  # enable all interrupts: set bit 3 in mstatus to enable machine irqs (MIE)
+  # to receive hardware interrupts and exceptions
   li    t0, 1 << 3
   csrrs x0, mstatus, t0
   ret

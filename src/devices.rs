@@ -5,95 +5,82 @@
  * See LICENSE for usage and copying.
  */
 
-extern crate dtb;
+/* we need this for parsing devicetrees */
+extern crate devicetree;
 
-use core::fmt;
-use alloc::vec::Vec;
 use super::serial;
 use super::physmem;
 use super::timer;
 
-/* supported device types for the hypervisor */
-#[derive(Hash, Eq, PartialEq, Debug, Clone, Copy)]
-pub enum DeviceType
+/* set of basic devices for the hypervisor to use. at first, this was an elaborate
+hashmap of objects describing components and peripherals but it seemed overkill. 
+all we really want to do is provide the system primitives to the hypervisor:
+CPU resources, RAM resources, and an outlet for debugging messages.
+
+this structure provides access to all that. */
+#[derive(Clone)]
+pub struct Devices
 {
-    PhysicalCPUCount,   /* number of physical processor CPU cores available */
-    DebugConsole,       /* serial port for outputting debug */
-    PhysicalRAM,        /* block(s) of physical memory available for software use */
-    FixedTimer          /* a fixed periodic timer for scheduling workloads */
+    nr_cpu_cores: usize,                /* number of CPU cores */
+    system_ram: physmem::RAMArea,       /* describe the main system RAM area */
+    debug_console: serial::SerialPort,  /* place to send debug logging */
+    scheduler_timer: timer::Timer       /* periodic timer for the scheduler */ 
 }
 
-/* supported device structures for the hypervisor */
-pub enum Device
+impl core::fmt::Debug for Devices
 {
-    PhysicalCPUCount(usize),
-    DebugConsole(serial::SerialPort),
-    PhysicalRAM(Vec<physmem::RAMArea>),
-    FixedTimer(timer::Timer)
-}
-
-/* supported return data from a device operation */
-pub enum DeviceReturnData
-{
-    NoData
-}
-
-impl fmt::Debug for Device
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> core::fmt::Result
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
     {
-        match self
+        write!(f, " * Debug console (serial port) at 0x{:x}\n", self.debug_console.get_mmio_base())?;
+        write!(f, " * {} MiB of physical RAM available at 0x{:x}\n", self.system_ram.size / 1024 / 1024, self.system_ram.base)?;
+
+        let (base, freq) = (self.scheduler_timer.get_mmio_base(), self.scheduler_timer.get_frequency());
+        write!(f, " * {} Hz fixed timer(s) using CLINT at 0x{:x}\n", freq, base)?;
+
+        write!(f, " * {} physical CPU cores", self.nr_cpu_cores)?;
+        Ok(())
+    }
+}
+
+impl Devices
+{
+    /* create a new Devices structure using the given device tree: the device tree is
+    parsed to populate the structure with details of the system's base hardware
+        => device_tree_raw = ptr to device tree to parse
+        <= Some(Device) if successful, or None for failure
+    */
+    pub fn new(_device_tree_raw: &u8) -> Option<Devices>
+    {
+        /* hardwire the device structure for now with Qemu defaults */
+        let d = Devices
         {
-            Device::PhysicalCPUCount(c) => write!(f, "{} physical CPU cores", c),
-            Device::DebugConsole(s) => write!(f, "Debug console (serial port) at 0x{:x}", s.get_mmio_base()),
-            Device::PhysicalRAM(ram_areas) =>
-            {
-                for area in ram_areas
-                {
-                    match write!(f, "{} MiB of physical RAM available at 0x{:x}", area.size / 1024 / 1024, area.base)
-                    {
-                        Err(e) => return Err(e),
-                        _ => ()                        
-                    };
-                }
-                Ok(())
-            },
-            Device::FixedTimer(t) =>
-            {
-                let (base, freq) = (t.get_mmio_base(), t.get_frequency());
-                write!(f, "Fixed {} Hz CLINT timer(s) (base 0x{:x})", freq, base)
-            }
-        }
+            nr_cpu_cores: 4,
+            system_ram: physmem::RAMArea { base: 0x80000000, size: 0x20000000 },
+            debug_console: serial::SerialPort::new(0x10000000),
+            scheduler_timer: timer::Timer::new(10000000, 0x2000000)
+        };
+
+        return Some(d);
     }
-}
 
-pub struct DeviceTreeIter
-{
-    device_tree: usize
-}
-
-impl DeviceTreeIter
-{
-    pub fn new(device_tree_buf: &u8) -> DeviceTreeIter
+    /* write msg string out to the debug serial port */
+    pub fn write_debug_string(&self, msg: &str)
     {
-        DeviceTreeIter
-        {
-            device_tree: 0
-        }
+        self.debug_console.write(msg);
     }
-}
 
-impl Iterator for DeviceTreeIter
-{
-    type Item = (DeviceType, Device);
-
-    fn next(&mut self) -> Option<(DeviceType, Device)>
+    /* return iterator describing RAM blocks available for general use */
+    pub fn get_phys_ram_areas(&self) -> physmem::RAMAreaIter
     {
-        return None;
+        physmem::validate_ram(self.nr_cpu_cores, self.system_ram)
     }
-}
 
-pub fn enumerate(device_tree_buf: &u8) -> DeviceTreeIter
-{    
-    return DeviceTreeIter::new(device_tree_buf);
+    /* enable periodic timer for PMT on this CPU core */
+    pub fn scheduler_timer_start(&self) { self.scheduler_timer.start(); }
+
+    /* interrupt this CPU core in usecs microseconds using periodic timer */
+    pub fn scheduler_timer_next(&self, usecs: u64)
+    {
+        self.scheduler_timer.next(usecs);
+    }
 }

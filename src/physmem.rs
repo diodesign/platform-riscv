@@ -110,6 +110,7 @@ impl PhysRAMState
 }
 
 /* describe a physical RAM area using its start address and size */
+#[derive(Copy, Clone)]
 pub struct RAMArea
 {
     pub base: PhysMemBase,
@@ -187,8 +188,8 @@ impl Iterator for RAMAreaIter
    In other words, pass a RAMArea of physical memory, and this will return an iterator of allocatable memory blocks
     => cpu_count = number of physical CPU cores present in the machine
        phys_ram_block = RAMArea describing this block of physical RAM
-    <= iterator that describes the available blocks of physical RAM, or None for failure */
-pub fn validate_ram(cpu_count: usize, phys_ram_block: RAMArea) -> Option<RAMAreaIter>
+    <= iterator that describes the available blocks of physical RAM */
+pub fn validate_ram(cpu_count: usize, phys_ram_block: RAMArea) -> RAMAreaIter
 {
     /* we'll assume the hypervisor, data, code, per-CPU heaps, and its boot payload are in a contiguous block of physical RAM */
     let (phys_hypervisor_start, phys_hypervisor_end) = hypervisor_footprint(cpu_count);
@@ -196,7 +197,7 @@ pub fn validate_ram(cpu_count: usize, phys_ram_block: RAMArea) -> Option<RAMArea
 
     /* return an iterator the higher level hypervisor can run through. this cuts the physical RAM
     block up into sections that do not contain the hypervisor footprint */
-    return Some(RAMAreaIter
+    RAMAreaIter
     {
         pos: phys_ram_block.base,
         total_area: phys_ram_block,
@@ -205,7 +206,7 @@ pub fn validate_ram(cpu_count: usize, phys_ram_block: RAMArea) -> Option<RAMArea
             base: phys_hypervisor_start, 
             size: phys_hypervisor_size
         }
-    });
+    }
 }
 
 /* return the (start address, end address) of the boot capsule's supervisor in physical memory */

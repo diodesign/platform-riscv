@@ -8,17 +8,20 @@
 extern "C"
 {
     fn platform_timer_irq_enable();
-    fn platform_timer_target(target: u64, clint_base: usize);
-    fn platform_timer_now(clint_base: usize) -> u64;
+    fn platform_timer_target(target: u64, clint_base: physmem::PhysMemBase);
+    fn platform_timer_now(clint_base: physmem::PhysMemBase) -> u64;
 }
+
+use super::physmem;
 
 /* divide timer frequency down into ticks per microsecond */
 const MILLION: u64 = 1000000;
 
 /* describe a per-CPU core timer */
+#[derive(Clone, Copy)]
 pub struct Timer
 {
-    clint_base: usize, /* base MMIO address of system's CLINT IO controller */
+    clint_base: physmem::PhysMemBase, /* base MMIO address of system's CLINT IO controller */
     frequency: u64,    /* rate at which timer is incremented */
 }
 
@@ -29,7 +32,7 @@ impl Timer
        => frequency = rate at which this timer counter increments
           clint_base = base MMIO address of the CLINT controlling this timer 
        <= per-CPU core timer object */
-    pub fn new(frequency: u64, clint_base: usize) -> Timer
+    pub fn new(frequency: u64, clint_base: physmem::PhysMemBase) -> Timer
     {
         Timer
         {
@@ -39,7 +42,7 @@ impl Timer
     }
 
     /* return base MMIO address of timer */
-    pub fn get_mmio_base(&self) -> usize { self.clint_base }
+    pub fn get_mmio_base(&self) -> physmem::PhysMemBase { self.clint_base }
 
     /* return frequency of timer */
     pub fn get_frequency(&self) -> u64 { self.frequency }
