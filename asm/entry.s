@@ -76,23 +76,7 @@ _start:
   slli      t2, t1, 21        # set bit 21 = TW (timewout wait)
   csrrs     x0, mstatus, t2
 
-  # find device tree size to pass to parsing code
-  # it's the second 32-bit word in the DTB header
-  # beware: this is a big endian value that needs
-  # converting to little endian
-  lw        t0, 4(a1)
-  # swap upper bytes in 32-bit value from BE to LE
-  srli      t1, t0, 24
-  andi      t1, t1, 0xff    # t1 = byte 3 -> byte 0
-  srli      t2, t0, 8
-  li        t3, 0xff00
-  and       t2, t2, t3      # t2 = byte 2 -> byte 1
-  # note: we only support max 64KB device trees
-  # ie: we'll only swap over bytes 3 and 2
-  # a2 = ((t0 >> 8) & 0xff00) | ((t0 >> 24) & 0xff)
-  or        a2, t2, t1
-
-  # call hwentry with runtime-assigned CPU ID number in a0, devicetree in a1, devicetree size in a2
+  # call hwentry with runtime-assigned CPU ID number in a0, devicetree in a1
   la        t0, hventry
   jalr      ra, t0, 0
 

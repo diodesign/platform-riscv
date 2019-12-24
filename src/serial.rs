@@ -101,7 +101,14 @@ impl fmt::Write for SerialWriter
     }
 }
 
+/* force a string to be written to the default serial port.
+   use this only if all other logging mechanisms are broken */
+#[cfg(debug_assertions)]
 pub fn emergency_debug_write(msg: &str)
 {
     qprint!("{}", msg);    
 }
+
+/* if this isn't a debug build then compile out emergency debug writes */
+#[cfg(not(debug_assertions))]
+pub fn emergency_debug_write(_: &str) { }

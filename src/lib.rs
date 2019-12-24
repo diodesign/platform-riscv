@@ -17,6 +17,7 @@ pub mod serial;
 #[macro_use]
 pub mod csr;
 pub mod physmem;
+pub mod virtmem;
 pub mod irq;
 pub mod cpu;
 pub mod timer;
