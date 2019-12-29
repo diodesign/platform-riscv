@@ -4,7 +4,7 @@
  *
  * See LICENSE for usage and copying.
  */
-
+ 
 /* we need this for parsing devicetrees */
 extern crate devicetree;
 
@@ -18,9 +18,12 @@ all we really want to do is provide the system primitives to the hypervisor:
 CPU resources, RAM resources, and an outlet for debugging messages.
 
 this structure provides access to all that. */
-#[derive(Clone)]
+// #[derive(Copy)]
 pub struct Devices
 {
+    parsed: devicetree::DeviceTree,     /* parsed device tree */
+
+    /* frequently used stuff, cached here instead of searching the tree every time */
     nr_cpu_cores: usize,                /* number of CPU cores */
     system_ram: physmem::RAMArea,       /* describe the main system RAM area */
     debug_console: serial::SerialPort,  /* place to send debug logging */
@@ -31,6 +34,8 @@ impl core::fmt::Debug for Devices
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
     {
+        write!(f, " * Parsed device tree: {:?}\n", self.parsed)?;
+        
         write!(f, " * Debug console (serial port) at 0x{:x}\n", self.debug_console.get_mmio_base())?;
         write!(f, " * {} MiB of physical RAM available at 0x{:x}\n", self.system_ram.size / 1024 / 1024, self.system_ram.base)?;
 
@@ -44,16 +49,23 @@ impl core::fmt::Debug for Devices
 
 impl Devices
 {
-    /* create a new Devices structure using the given device tree: the device tree is
-    parsed to populate the structure with details of the system's base hardware
-        => device_tree_raw = ptr to device tree to parse
+    /* create a new Devices structure using the given device tree blob: the device tree
+    binary is parsed to populate the structure with details of the system's base hardware
+        => dtb = ptr to device tree blob to parse
         <= Some(Device) if successful, or None for failure
     */
-    pub fn new(_device_tree_raw: &u8) -> Option<Devices>
+    pub fn new(dtb: &devicetree::DeviceTreeBlob) -> Option<Devices>
     {
+        let parsed = match dtb.to_parsed()
+        {
+            Some(p) => p,
+            None => return None
+        };
+
         /* hardwire the device structure for now with Qemu defaults */
         let d = Devices
         {
+            parsed: parsed,
             nr_cpu_cores: 4,
             system_ram: physmem::RAMArea { base: 0x80000000, size: 0x20000000 },
             debug_console: serial::SerialPort::new(0x10000000),

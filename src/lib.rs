@@ -7,9 +7,10 @@
 
 #![no_std]
 #![feature(asm)]
+#[macro_use]
+extern crate alloc;
 
 extern crate devicetree;
-extern crate alloc;
 
 /* expose architecture common code to platform-specific code */
 #[macro_use]

@@ -80,6 +80,8 @@ _start:
   la        t0, hventry
   jalr      ra, t0, 0
 
+# let's go back to the rock, go back to the rock, and see you at 440.
+
 # fall through to loop rather than crash into random instructions/data
 # wait for interrupts to come in and service them
 infinite_loop:
