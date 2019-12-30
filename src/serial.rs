@@ -6,6 +6,7 @@
  */
 
 use core::ptr::write_volatile;
+use alloc::string::String;
 
 /* serial port controller registers, relative to the base address */
 const TXDATA: usize = 0x0;     /* write a byte here to transmit it over the port */
@@ -14,7 +15,7 @@ const TXDATA: usize = 0x0;     /* write a byte here to transmit it over the port
 //const TXCTRL_ENABLE: u32 = 1 << 0; /* bit 0 of TXCTRL = 1 to enable transmission */
 
 /* define a standard serial port input/output device */
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct SerialPort
 {
     base: usize /* base MMIO address of the serial port controller */
@@ -104,11 +105,11 @@ impl fmt::Write for SerialWriter
 /* force a string to be written to the default serial port.
    use this only if all other logging mechanisms are broken */
 #[cfg(debug_assertions)]
-pub fn emergency_debug_write(msg: &str)
+pub fn emergency_debug_write(msg: &String)
 {
     qprint!("{}", msg);    
 }
 
 /* if this isn't a debug build then compile out emergency debug writes */
 #[cfg(not(debug_assertions))]
-pub fn emergency_debug_write(_: &str) { }
+pub fn emergency_debug_write(_: &String) { }

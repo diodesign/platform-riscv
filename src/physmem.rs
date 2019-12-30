@@ -110,7 +110,7 @@ impl PhysRAMState
 }
 
 /* describe a physical RAM area using its start address and size */
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct RAMArea
 {
     pub base: PhysMemBase,

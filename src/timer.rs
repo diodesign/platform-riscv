@@ -18,7 +18,7 @@ use super::physmem;
 const MILLION: u64 = 1000000;
 
 /* describe a per-CPU core timer */
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Timer
 {
     clint_base: physmem::PhysMemBase, /* base MMIO address of system's CLINT IO controller */
