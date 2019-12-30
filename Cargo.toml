@@ -4,6 +4,7 @@ version = "0.0.1"
 authors = ["Chris Williams <diodesign@tuta.io>"]
 license = "MIT"
 edition = "2018"
+publish = false
 
 [dependencies.devicetree]
 path = "../devicetree"

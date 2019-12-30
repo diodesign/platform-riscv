@@ -34,16 +34,16 @@ impl core::fmt::Debug for Devices
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
     {
-        write!(f, " * Parsed device tree: {:?}\n", self.parsed)?;
+        write!(f, "{:?}", self.parsed)
         
-        write!(f, " * Debug console (serial port) at 0x{:x}\n", self.debug_console.get_mmio_base())?;
+        /* write!(f, " * Debug console (serial port) at 0x{:x}\n", self.debug_console.get_mmio_base())?;
         write!(f, " * {} MiB of physical RAM available at 0x{:x}\n", self.system_ram.size / 1024 / 1024, self.system_ram.base)?;
 
         let (base, freq) = (self.scheduler_timer.get_mmio_base(), self.scheduler_timer.get_frequency());
         write!(f, " * {} Hz fixed timer(s) using CLINT at 0x{:x}\n", freq, base)?;
 
         write!(f, " * {} physical CPU cores", self.nr_cpu_cores)?;
-        Ok(())
+        Ok(()) */
     }
 }
 
@@ -58,8 +58,8 @@ impl Devices
     {
         let parsed = match dtb.to_parsed()
         {
-            Some(p) => p,
-            None => return None
+            Ok(p) => p,
+            Err(_) => return None
         };
 
         /* hardwire the device structure for now with Qemu defaults */
