@@ -1,6 +1,6 @@
 /* diosix RV32G/RV64G hardware serial controller
  *
- * (c) Chris Williams, 2019.
+ * (c) Chris Williams, 2019-2020
  *
  * See LICENSE for usage and copying.
  */
@@ -86,7 +86,7 @@ macro_rules! qprint
     });
 }
 
-/* create a generic debug console writer */
+/* create a generic hard-coded debug console writer */
 pub struct SerialWriter;
 pub static mut QEMUUART: SerialWriter = SerialWriter {};
 
@@ -101,15 +101,3 @@ impl fmt::Write for SerialWriter
         Ok(())
     }
 }
-
-/* force a string to be written to the default serial port.
-   use this only if all other logging mechanisms are broken */
-#[cfg(debug_assertions)]
-pub fn emergency_debug_write(msg: &String)
-{
-    qprint!("{}", msg);    
-}
-
-/* if this isn't a debug build then compile out emergency debug writes */
-#[cfg(not(debug_assertions))]
-pub fn emergency_debug_write(_: &String) { }

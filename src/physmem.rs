@@ -187,7 +187,7 @@ impl Iterator for RAMAreaIter
    and returning just blocks of RAM that can be allocated and used by capsules and the hypervisor as needed.
    In other words, pass a RAMArea of physical memory, and this will return an iterator of allocatable memory blocks
     => cpu_count = number of physical CPU cores present in the machine
-       phys_ram_block = RAMArea describing this block of physical RAM
+       phys_ram_blocks = Vector list of RAMAreas describing this block of physical RAM
     <= iterator that describes the available blocks of physical RAM */
 pub fn validate_ram(cpu_count: usize, phys_ram_block: RAMArea) -> RAMAreaIter
 {
