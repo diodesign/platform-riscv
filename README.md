@@ -8,4 +8,4 @@ Please [email](mailto:diodesign@tuta.io) project lead Chris Williams if you have
 
 ### Copyright and license <a name="copyright"></a>
 
-Copyright &copy; Chris Williams, 2019. See [LICENSE](LICENSE) for distribution and use of source code and binaries.
+Copyright &copy; Chris Williams, 2019-2020. See [LICENSE](LICENSE) for distribution and use of source code and binaries.
