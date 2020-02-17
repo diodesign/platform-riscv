@@ -7,20 +7,15 @@
 
 #[allow(dead_code)] 
 
+use core::fmt;
+use alloc::string::String;
+
 extern "C"
 {
     fn platform_save_supervisor_state(state: &SupervisorState);
     fn platform_load_supervisor_state(state: &SupervisorState);
     fn platform_set_supervisor_return();
 }
-
-/* write once during initialization, read many after */
-static mut CPU_CORE_COUNT: Option<usize> = None;
-
-/* list of CPU extension initials (yes, I and E are a base) */
-const EXTENSIONS: &'static [&'static str] = &["a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
-                                              "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
-                                              "u", "v", "w", "x", "y", "z"];
 
 /* flags within CPUFeatures, derived from misa */
 const CPUFEATURES_SUPERVISOR_MODE: usize = 1 << 18; /* supervisor mode is implemented */
@@ -35,8 +30,9 @@ pub enum PrivilegeMode
     User        /* usermode */
 }
 
-pub type Reg = usize;
-pub type Entry = usize;
+pub type CPUcount = usize;  /* number of CPU cores in a processor or system */
+pub type Reg = usize;       /* a CPU register */
+pub type Entry = usize;     /* supervisor kernel entry point */
 
 /* describe the CPU state for supervisor-level code */
 #[derive(Copy, Clone)]
@@ -106,22 +102,6 @@ pub fn prep_supervisor_return()
     unsafe { platform_set_supervisor_return(); }
 }
 
-/* initialize CPU handling code
-   => device_tree_buf = device tree to parse 
-   <= number of CPU cores in tree, or None for parse error */
-pub fn init(device_tree_buf: &u8) -> Option<usize>
-{
-    match crate::devicetree::get_cpu_count(device_tree_buf)
-    {
-        Some(c) =>
-        {
-            unsafe { CPU_CORE_COUNT = Some(c) };
-            return Some(c);
-        }
-        None => return None
-    }
-}
-
 /* bit masks of CPU features and extenions taken from misa */
 pub type CPUFeatures = usize;
 
@@ -148,124 +128,6 @@ pub fn features_priv_check(required: PrivilegeMode) -> bool
     }
 }
 
-/* provide an iterator that lists descriptive strings about this CPU core */
-pub fn describe() -> CPUDescriptionIter
-{
-    CPUDescriptionIter
-    {
-        state: CPUDescriptionState::Arch,
-        misa: read_csr!(misa)
-    }
-}
-
-/* define the iterator's state machine, allowing us to step from the 
-   architecture to extensions to the microarchitecture */
-enum CPUDescriptionState
-{
-    Arch,
-    Extension(usize),
-    Microarch,
-    Done
-}
-
-pub struct CPUDescriptionIter
-{
-    state: CPUDescriptionState,
-    misa: usize
-}
-
-impl Iterator for CPUDescriptionIter
-{
-    type Item = &'static str;
-    
-    fn next(&mut self) -> Option<&'static str>
-    {
-        match self.state
-        {
-            /* return whether this is RISCV32 or RISCV64 */
-            CPUDescriptionState::Arch =>
-            {
-                /* ISA width is stored in upper 2 bits of misa */
-                let width_shift = if cfg!(target_arch = "riscv32")
-                {
-                    32 - 2
-                }
-                else /* assumes RV128 is unsupported */
-                {
-                    64 - 2
-                };
-
-                /* advance the state machine */
-                self.state = CPUDescriptionState::Extension(0);
-
-                /* we wouldn't make it this far if we were booting RV32 code on RV64 and vice versa.
-                check anyway for diagnostic purposes */
-                Some(match self.misa >> width_shift
-                {
-                    1 => "32-bit RISC-V, ext: ",
-                    2 => "64-bit RISC-V, ext: ",
-                    _ => "Unsupported RISC-V, ext: "
-                })
-            },
-            CPUDescriptionState::Extension(index) =>
-            {
-                /* ensure we move onto the next extension, or state if we hit the end (Z, 25) */
-                if index < 25
-                {
-                    self.state = CPUDescriptionState::Extension(index + 1);
-                }
-                else
-                {
-                    self.state = CPUDescriptionState::Microarch;
-                }
-
-                /* output the initial of the extension if its bit is set in misa */
-                if self.misa & (1 << index) != 0
-                {
-                    Some(EXTENSIONS[index])
-                }
-                else
-                {
-                    Some("")
-                }
-            },
-            CPUDescriptionState::Microarch =>
-            {
-                /* ensure we end this iterator */
-                self.state = CPUDescriptionState::Done;
-
-                /* taken from https://github.com/riscv/riscv-isa-manual/blob/master/marchid.md */
-                Some(match read_csr!(marchid)
-                {
-                    1 =>  " Rocket",
-                    2 =>  " BOOM",
-                    3 =>  " Ariane",
-                    4 =>  " RI5CY",
-                    5 =>  " Spike",
-                    6 =>  " E-Class",
-                    7 =>  " ORCA",
-                    8 =>  " ORCA",
-                    9 =>  " YARVI",
-                    10 => " RVBS",
-                    11 => " SweRV EH1",
-                    12 => " MSCC",
-                    13 => " BlackParrot",
-                    14 => " BaseJump Manycore",
-                    _ => ""
-                })
-            },
-            CPUDescriptionState::Done => None /* end the iterator */
-        }
-    }
-}
-
-/* return number of CPU cores present in the system,
-or None for CPU cores not yet counted. */
-pub fn nr_of_cores() -> Option<usize>
-{
-    return unsafe { CPU_CORE_COUNT };
-}
-
 /* return the privilege level of the code running before we entered the machine level */
 pub fn previous_privilege() -> PrivilegeMode
 {
@@ -275,5 +137,116 @@ pub fn previous_privilege() -> PrivilegeMode
         0 => PrivilegeMode::User,
         1 => PrivilegeMode::Supervisor,
         _ => PrivilegeMode::Hypervisor
+    }
+}
+
+/* define a RISC-V CPU extension in terms of its misa bit position and initial character */
+struct CPUExtension
+{
+    bit: usize,
+    initial: char
+}
+
+/* list of CPU extensions in the conventional order with their corresponding misa bit positions */
+const EXTENSIONS: &'static[CPUExtension] =
+    &[
+        CPUExtension { bit:  8, initial: 'I' },
+        CPUExtension { bit:  4, initial: 'E' },
+        CPUExtension { bit: 12, initial: 'M' },
+        CPUExtension { bit:  0, initial: 'A' },
+        CPUExtension { bit:  5, initial: 'F' },
+        CPUExtension { bit:  3, initial: 'D' },
+        CPUExtension { bit:  6, initial: 'G' },
+        CPUExtension { bit: 16, initial: 'Q' },
+        CPUExtension { bit: 11, initial: 'L' },
+        CPUExtension { bit:  2, initial: 'C' },
+        CPUExtension { bit:  1, initial: 'B' },
+        CPUExtension { bit:  9, initial: 'J' },
+        CPUExtension { bit: 19, initial: 'T' },
+        CPUExtension { bit: 15, initial: 'P' },
+        CPUExtension { bit: 21, initial: 'V' },
+        CPUExtension { bit: 13, initial: 'N' },
+        CPUExtension { bit:  7, initial: 'H' },
+        CPUExtension { bit: 25, initial: 'Z' }
+    ];
+
+/* describe a CPU core in terms of its ISA width, extensions, and architecture code name */
+pub struct CPUDescription
+{
+    misa: usize,
+    marchid: usize
+}
+
+impl CPUDescription
+{
+    /* create a description of this CPU core */
+    pub fn new() -> CPUDescription
+    {
+        CPUDescription
+        {
+            misa: read_csr!(misa),
+            marchid: read_csr!(marchid)
+        }
+    }
+}
+
+/* produce a human-readable version of the description */
+impl fmt::Debug for CPUDescription
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+        /* ISA width is stored in upper 2 bits of misa */
+        let width_shift = if cfg!(target_arch = "riscv32")
+        {
+            32 - 2
+        }
+        else /* assumes RV128 is unsupported */
+        {
+            64 - 2
+        };
+
+        /* extract ISA width from misa to sanity check this CPU.
+        bear in mind, if this is a 32-bit hypervisor, it won't
+        boot on a 64-bit system and vice versa */
+        let isa = match self.misa >> width_shift
+        {
+            1 => 32,
+            2 => 64,
+            _ => return Err(fmt::Error)
+        };
+
+        let mut extensions = String::new();
+        for ext in EXTENSIONS
+        {
+            if self.misa & (1 << ext.bit) != 0
+            {
+                extensions.push(ext.initial);
+            }
+        }
+
+        /* taken from https://github.com/riscv/riscv-isa-manual/blob/master/marchid.md */
+        let architecture = match self.marchid
+        {
+            0 =>  "Qemu/Unknown",
+            1 =>  "Rocket",
+            2 =>  "BOOM",
+            3 =>  "Ariane",
+            4 =>  "RI5CY",
+            5 =>  "Spike",
+            6 =>  "E-Class",
+            7 =>  "ORCA",
+            8 =>  "ORCA",
+            9 =>  "YARVI",
+            10 => "RVBS",
+            11 => "SweRV EH1",
+            12 => "MSCC",
+            13 => "BlackParrot",
+            14 => "BaseJump Manycore",
+            15 => "C-Class",
+            _ => "Unknown"
+        };
+
+        /* put it all together */
+        write!(f, "RV{}{} ({})", isa, extensions, architecture)
     }
 }

@@ -13,7 +13,7 @@
 
 # hypervisor constants, such as global variable and lock locations
 # check this file for static hypervisor data layout
-.include "src/platform/riscv/asm/consts.s"
+.include "src/platform-riscv/asm/consts.s"
 
 # typical hardware physical memory map
 # 0x00000000, size: 0x100:     Debug ROM/data
@@ -67,18 +67,20 @@ _start:
   sub       sp, t4, t1
 
   # set up early exception/interrupt handling (corrupts t0)
+  # leave hardware interrupts disabled for now
   call      irq_early_init
 
   # initialize basic settings
-  # trap WFI so we can auto-yield to other capsules
+  # trap WFI in supervisors so we can auto-yield to other capsules
   li        t1, 1
   slli      t2, t1, 21        # set bit 21 = TW (timewout wait)
   csrrs     x0, mstatus, t2
 
-# call hwentry with runtime-assigned CPU ID number in a0 and devicetree in a1
-enter_hypervisor:
+  # call hwentry with runtime-assigned CPU ID number in a0, devicetree in a1
   la        t0, hventry
-  jalr      ra, t0, 0  
+  jalr      ra, t0, 0
+
+# let's go back to the rock, go back to the rock, and see you at 440.
 
 # fall through to loop rather than crash into random instructions/data
 # wait for interrupts to come in and service them

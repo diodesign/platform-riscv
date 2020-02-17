@@ -5,6 +5,11 @@
  * See LICENSE for usage and copying.
  */
 
+use core::ptr::write_volatile;
+
+/* physical RAM location of test interface for SiFive and Qemu targets */
+const TEST_INTERFACE_MMIO_ADDR: usize = 0x100000; 
+
 /* SiFive / Qemu defined a simple API for returning from tests with the all OK
 or an error code. See: https://github.com/qemu/qemu/blob/master/hw/riscv/sifive_test.c
 and https://github.com/qemu/qemu/blob/master/include/hw/riscv/sifive_test.h for magic numbers
@@ -26,11 +31,8 @@ pub fn end(result: Result<u32, u32>)
     }
 }
 
-/* write word to the SiFive / Qemu test interface fixed at 0x100000 on Virt environments */
+/* write word to the test interface for SiFive, or Qemu on Virt environments */
 fn write_word(word: u32)
 {
-    unsafe
-    {
-        asm!("sw $0, 0($1)" :: "r"(word), "r"(0x100000) ::);
-    }
+    unsafe { write_volatile(TEST_INTERFACE_MMIO_ADDR as *mut u32, word); }
 }
