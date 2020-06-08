@@ -13,7 +13,7 @@ macro_rules! read_csr
         unsafe
         {
             let value: usize;
-            asm!(concat!("csrrs $0, ", stringify!($csr), ", x0") : "=r"(value) ::: "volatile");
+            llvm_asm!(concat!("csrrs $0, ", stringify!($csr), ", x0") : "=r"(value) ::: "volatile");
             value
         }
     };
@@ -26,7 +26,7 @@ macro_rules! write_csr
     {
         unsafe
         {
-            asm!(concat!("csrrw x0, ", stringify!($csr), ", $0") :: "r"($value) :: "volatile");
+            llvm_asm!(concat!("csrrw x0, ", stringify!($csr), ", $0") :: "r"($value) :: "volatile");
         }
     };
 }
@@ -38,7 +38,7 @@ macro_rules! clear_csr
     {
         unsafe
         {
-            asm!(concat!("csrrc x0, ", stringify!($csr), ", $0") :: "r"($value) :: "volatile");
+            llvm_asm!(concat!("csrrc x0, ", stringify!($csr), ", $0") :: "r"($value) :: "volatile");
         }
     };
 }

@@ -6,7 +6,7 @@
  */
 
 #![no_std]
-#![feature(asm)]
+#![feature(llvm_asm)]
 #[macro_use]
 extern crate alloc;
 
