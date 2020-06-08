@@ -52,7 +52,8 @@ impl Devices
             nr_cpu_cores:
             {
                 /* cells.address = #address-cells for /cpus, which is the number of u32 cells
-                per logical CPU core in each physical CPU node (see below and spec) */
+                per logical CPU core ID number in each physical CPU node (see below and spec).
+                typically this value is 1. */
                 let cells = parsed.get_address_size_cells(&format!("/cpus"));
 
                 let mut count = 0;
@@ -81,7 +82,7 @@ impl Devices
                 let mut chunks = Vec::new();
                 for path in parsed.iter(&format!("/memory@"), 1)
                 {
-                    if let Ok(chunk) = get_ram_area(&parsed, &path)
+                    if let Ok(chunk) = get_ram_chunk(&parsed, &path)
                     {
                         chunks.push(chunk);
                     }
@@ -199,7 +200,7 @@ fn create_debug_console(dt: &DeviceTree, path: &String) -> Result<serial::Serial
 }
 
 /* return a RAMArea describing the given devicetree /memory node, or error for failure */
-fn get_ram_area(dt: &DeviceTree, path: &String) -> Result<physmem::RAMArea, DeviceTreeError>
+fn get_ram_chunk(dt: &DeviceTree, path: &String) -> Result<physmem::RAMArea, DeviceTreeError>
 {
     /* get the width of the memory area's base address and size from the parent node */
     let parent = devicetree::get_parent(path);

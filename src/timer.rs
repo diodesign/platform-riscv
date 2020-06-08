@@ -14,8 +14,8 @@ extern "C"
 
 use super::physmem;
 
-/* divide timer frequency down into ticks per microsecond */
-const MILLION: u64 = 1000000;
+/* divide timer frequency down into ticks per microsecond (1 millionth) */
+const MILLION: u64 = 1 * 1000 * 1000;
 
 /* describe a per-CPU core timer */
 #[derive(Clone, Copy, Debug)]

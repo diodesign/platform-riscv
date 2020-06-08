@@ -26,7 +26,7 @@ pub fn barrier()
 {
     unsafe
     {
-        asm!("fence iorw, iorw" :::: "volatile");
+        llvm_asm!("fence iorw, iorw" :::: "volatile");
     }
 }
 
@@ -36,7 +36,7 @@ pub fn tlb_flush()
 {
     unsafe
     {
-        asm!("sfence.vma x0,x0" :::: "volatile");
+        llvm_asm!("sfence.vma x0,x0" :::: "volatile");
     }
 }
 
