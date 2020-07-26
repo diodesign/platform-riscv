@@ -1,8 +1,10 @@
-# diosix hypervisor common low-level entry points for RV32G/RV64G platforms
+# diosix hypervisor common low-level entry points for RV32I/RV64I platforms
 #
-# Assumes a0 = CPU/Hart ID number, a1 -> device tree
+# Assumes on entry: a0 = CPU/Hart ID number, a1 -> device tree
 #
-# (c) Chris Williams, 2019.
+# All values are little endian unless otherwise specified
+#
+# (c) Chris Williams, 2019-2020.
 # See LICENSE for usage and copying.
 
 # _start *must* be the first routine in this file
@@ -76,7 +78,11 @@ _start:
   slli      t2, t1, 21        # set bit 21 = TW (timewout wait)
   csrrs     x0, mstatus, t2
 
-  # call hwentry with runtime-assigned CPU ID number in a0, devicetree in a1
+  # call hwentry with:
+  # a0 = runtime-assigned CPU ID number
+  # a1 = pointer to start of devicetree
+  # a2 = big-endian length of the devicetree
+  lw        a2, 4(a1)       # 32-bit size of tree stored from byte 4 in tree blob
   la        t0, hventry
   jalr      ra, t0, 0
 

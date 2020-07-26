@@ -1,6 +1,6 @@
 /* diosix RV32/RV64 physical CPU core management
  *
- * (c) Chris Williams, 2019.
+ * (c) Chris Williams, 2019-2020.
  *
  * See LICENSE for usage and copying.
  */
@@ -205,7 +205,7 @@ impl fmt::Debug for CPUDescription
             64 - 2
         };
 
-        /* extract ISA width from misa to sanity check this CPU.
+        /* extract ISA width from misa to check this CPU.
         bear in mind, if this is a 32-bit hypervisor, it won't
         boot on a 64-bit system and vice versa */
         let isa = match self.misa >> width_shift

@@ -1,6 +1,6 @@
 /* diosix RV32G/RV64G code for managing physical memory
  *
- * (c) Chris Williams, 2019.
+ * (c) Chris Williams, 2019-2020.
  *
  * See LICENSE for usage and copying.
  */
@@ -60,7 +60,7 @@ const PHYS_PMP_EXEC: usize  = 1 << 2;
 const PHYS_PMP_TOR: usize   = 1 << 3;
 
 /* each CPU has a fix memory overhead, allocated during boot */
-const PHYS_MEM_PER_CPU: usize = 1 << 18; /* 256KB. see ../asm/const.s */
+const PHYS_MEM_PER_CPU: usize = 1 << 19; /* 512KB. see ../asm/const.s */
 
 /* standardize types for passing around physical RAM addresses */
 pub type PhysMemBase = usize;
@@ -133,7 +133,7 @@ impl Iterator for RAMAreaIter
     /* return a physical RAM area or None to end iteration */
     fn next(&mut self) -> Option<RAMArea>
     {
-        /* if for some reason the iterator starts below phys RAM, bring it up to sanity */
+        /* if for some reason the iterator starts below phys RAM, bring it up to reality */
         if self.pos < self.total_area.base
         {
             self.pos = self.total_area.base
