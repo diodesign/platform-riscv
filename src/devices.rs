@@ -2,17 +2,18 @@
  *
  * discover hardware from a firmware-supplied device tree 
  * 
- * (c) Chris Williams, 2019-2020
+ * (c) Chris Williams, 2019-2020.
  *
  * See LICENSE for usage and copying.
  */
  
 extern crate devicetree;
-use devicetree::{DeviceTree, DeviceTreeBlob, DeviceTreeError, DeviceTreeProperty, DeviceTreeIterDepth};
+use devicetree::{DeviceTree, DeviceTreeBlob, DeviceTreeError};
 
 use super::serial;
 use super::physmem;
 use super::timer;
+use super::errata;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -32,7 +33,11 @@ pub struct Devices
     nr_cpu_cores: usize,                        /* number of logical CPU cores */
     system_ram: Vec<physmem::RAMArea>,          /* list of physical RAM chunks */
     debug_console: Option<serial::SerialPort>,  /* place to send debug logging, if possible */
-    scheduler_timer: Option<timer::Timer>       /* periodic timer for the scheduler */ 
+    scheduler_timer: Option<timer::Timer>,      /* periodic timer for the scheduler */ 
+
+    /* known errata we need to deal with */
+    errata_known: u64,                          /* bitfield of errata we know about */
+    errata_fixed: u64                           /* bitfield of errata we can fix */
 }
 
 impl Devices
@@ -42,9 +47,12 @@ impl Devices
         => dtb = ptr to device tree blob to parse
         <= Some(Devices) if successful, or None for failure
     */
-    pub fn new(dtb: &DeviceTreeBlob) -> Result<Devices, DeviceTreeError>
+    pub fn new(dtb: &[u8]) -> Result<Devices, DeviceTreeError>
     {
-        let parsed = dtb.to_parsed()?;
+        let blob = DeviceTreeBlob::from_slice(dtb)?;
+        let parsed = blob.to_parsed()?;
+
+        let (errata_known, errata_fixed) = errata::from_model(parsed.get_property(&format!("/"), &format!("model"))?.as_text()?);
 
         /* fill out the minimum default devices expected by the hypervisor from parsed DTB */
         let d = Devices
@@ -108,6 +116,8 @@ impl Devices
             },
 
             parsed: parsed,
+            errata_known: errata_known,
+            errata_fixed: errata_fixed
         };
 
         Ok(d)

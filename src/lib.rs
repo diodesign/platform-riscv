@@ -1,6 +1,6 @@
 /* diosix RV32G/RV64G common hardware-specific code
  *
- * (c) Chris Williams, 2019.
+ * (c) Chris Williams, 2019-2020.
  *
  * See LICENSE for usage and copying.
  */
@@ -24,3 +24,4 @@ pub mod cpu;
 pub mod timer;
 pub mod test;
 pub mod devices;
+pub mod errata;

@@ -1,6 +1,6 @@
 # diosix hypervisor memory locations and layout for common RV32G/RV64G targets
 #
-# (c) Chris Williams, 2018-19.
+# (c) Chris Williams, 2018-2020.
 # See LICENSE for usage and copying.
 
 .equ PAGE_SIZE, (4096)
@@ -27,9 +27,9 @@
 #   .   page of private variables
 #   .   private heap space
 
-# describe per-CPU slab. each slab is 1 << 18 bytes in size = 256KB
+# describe per-CPU slab. each slab is (1 << 19) bytes in size = 512KB
 # update ../src/physmem.rs PHYS_MEM_PER_CPU if HV_CPU_SLAB_SHIFT changes
-.equ HV_CPU_SLAB_SHIFT,         (18)
+.equ HV_CPU_SLAB_SHIFT,         (19)
 .equ HV_CPU_SLAB_SIZE,          (1 << HV_CPU_SLAB_SHIFT)
 .equ HV_CPU_STACK_BASE,         (0)
 .equ HV_CPU_STACK_SIZE,         (32 * 1024)

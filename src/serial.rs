@@ -1,12 +1,11 @@
 /* diosix RV32G/RV64G hardware serial controller
  *
- * (c) Chris Williams, 2019-2020
+ * (c) Chris Williams, 2019-2020.
  *
  * See LICENSE for usage and copying.
  */
 
 use core::ptr::write_volatile;
-use alloc::string::String;
 
 /* serial port controller registers, relative to the base address */
 const TXDATA: usize = 0x0;     /* write a byte here to transmit it over the port */
@@ -64,14 +63,14 @@ impl SerialPort
     }
 }
 
-/* hard-coded debugging on Qemu platform */
+/* emergency debugging functions hard-coded for the Qemu platform. do not use on real hardware */
 use core::fmt;
 
 #[macro_export]
 macro_rules! qprintln
 {
-    ($fmt:expr) => (qprint!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => (qprint!(concat!($fmt, "\n"), $($arg)*));
+    ($fmt:expr) => ($crate::qprint!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::qprint!(concat!($fmt, "\n"), $($arg)*));
 }
 
 #[macro_export]
