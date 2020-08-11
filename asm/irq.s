@@ -25,11 +25,17 @@ irq_early_init:
   la    t0, irq_machine_handler
   csrrw x0, mtvec, t0
 
-  # delegate usernode syscalls (ecall) to the supervisor level.
-  # we'll just handle supervisor-to-usermode calls. there are no
-  # hypervisor-to-hypervisor ecalls.
-  li    t0, 1 << 8        # bit 8 = usermode ecall (as per mcause)
+  # delegate most exceptions to the supervisor guest kernel
+  # so that it can deal with them direct
+  # 0xb3ff = all exceptions (0-15) delegated except:
+  # 10: reserved
+  # 11: environment call from machine mode
+  # 14: reserved
+  li    t0, 0xb3ff
   csrrw x0, medeleg, t0
+
+  # don't delegate any interrupts
+  csrrw x0, mideleg, x0
 
   # enable all interrupts: set bit 3 in mstatus to enable machine irqs (MIE)
   # to receive hardware interrupts and exceptions

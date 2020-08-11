@@ -74,6 +74,7 @@ _start:
 
   # initialize basic settings
   # trap WFI in supervisors so we can auto-yield to other capsules
+  # works only if supported by the hardware platform
   li        t1, 1
   slli      t2, t1, 21        # set bit 21 = TW (timewout wait)
   csrrs     x0, mstatus, t2
