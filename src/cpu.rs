@@ -224,7 +224,8 @@ impl fmt::Debug for CPUDescription
             }
         }
 
-        /* taken from https://github.com/riscv/riscv-isa-manual/blob/master/marchid.md */
+        /* taken from https://github.com/riscv/riscv-isa-manual/blob/master/marchid.md
+        TODO: Automate this list? */
         let architecture = match self.marchid
         {
             0 =>  "Qemu/Unknown",
@@ -243,6 +244,8 @@ impl fmt::Debug for CPUDescription
             13 => "BlackParrot",
             14 => "BaseJump Manycore",
             15 => "C-Class",
+            16 => "SweRV EL2",
+            17 => "SweRV EH2",
             _ => "Unknown"
         };
 
