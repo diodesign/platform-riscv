@@ -127,7 +127,7 @@ impl Devices
     /* write msg string out to the debug serial port */
     pub fn write_debug_string(&self, msg: &str)
     {
-        if let Some(con) = self.debug_console
+        if let Some(con) = self.debug_console.clone()
         {
             con.write(msg);
         }
@@ -169,17 +169,9 @@ impl Devices
         dt.edit_property(&format!("/"), &format!("#address-cells"), DeviceTreeProperty::UnsignedInt32(2));
         dt.edit_property(&format!("/"), &format!("#size-cells"), DeviceTreeProperty::UnsignedInt32(2));
 
-        /* define the system memory as four u32s: upper and lower RAM base, upper and lower RAM size */
-        let ram_base_hi = (ram_base as u64 >> 32) as u32;
-        let ram_base_lo = (ram_base & 0xffffffff) as u32;
-        let ram_size_hi = (ram_size as u64 >> 32) as u32;
-        let ram_size_lo = (ram_size & 0xffffffff) as u32;
-
+        /* define the system memory's base physical address and size */
         dt.edit_property(&format!("/memory@{:x}", ram_base), &format!("reg"),
-            DeviceTreeProperty::MultipleUnsignedInt32
-            (
-                vec!(ram_base_hi, ram_base_lo, ram_size_hi, ram_size_lo)
-            ));
+            DeviceTreeProperty::MultipleUnsignedInt64_64(vec!((ram_base as u64, ram_size as u64))));
 
         /* define the CPU cores */
         let cpu_root_path = format!("/cpus");
@@ -193,18 +185,38 @@ impl Devices
             dt.edit_property(&cpu_node_path, &format!("reg"), DeviceTreeProperty::UnsignedInt32(cpu as u32));
             dt.edit_property(&cpu_node_path, &format!("status"), DeviceTreeProperty::Text(format!("okay")));
             dt.edit_property(&cpu_node_path, &format!("compatible"), DeviceTreeProperty::Text(format!("riscv")));
-            if cfg!(target_arch = "riscv32")
+            match cpu::get_isa_width()
             {
-                dt.edit_property(&cpu_node_path, &format!("mmu-type"), DeviceTreeProperty::Text(format!("riscv,sv32")));
-            }
-            else
-            {
-                dt.edit_property(&cpu_node_path, &format!("mmu-type"), DeviceTreeProperty::Text(format!("riscv,sv48")));
+                32 => dt.edit_property(&cpu_node_path, &format!("mmu-type"), DeviceTreeProperty::Text(format!("riscv,sv32"))),
+                64 | 128 => dt.edit_property(&cpu_node_path, &format!("mmu-type"), DeviceTreeProperty::Text(format!("riscv,sv48"))),
+                w => panic!("Cannot derive virtualized environment. Unsupported ISA width {}", w)
             }
 
             /* get the lower case ISA string */
             let isa = (cpu::CPUDescription).isa_to_string().to_lowercase();
             dt.edit_property(&cpu_node_path, &format!("riscv,isa"), DeviceTreeProperty::Text(isa));
+        }
+
+        /* create virtual serial port based on the host's hardware */
+        match self.debug_console.clone()
+        {
+            Some(con) =>
+            {
+                let phys_base = con.get_mmio_base();
+                let size = con.get_mmio_size();
+                let compat = con.get_compatibility().clone();
+
+                let uart_node_path = format!("/uart@{}", phys_base);
+                dt.edit_property(&uart_node_path, &format!("reg"),
+                    DeviceTreeProperty::MultipleUnsignedInt64_64(vec!((phys_base as u64, size as u64))));
+                dt.edit_property(&uart_node_path, &format!("status"), DeviceTreeProperty::Text(format!("okay")));
+                dt.edit_property(&uart_node_path, &format!("compatible"), DeviceTreeProperty::Text(compat));
+
+                /* let the guest kernel find this serial port for output */
+                let chosen_node_path = format!("/chosen");
+                dt.edit_property(&chosen_node_path, &format!("stdout-path"), DeviceTreeProperty::Text(uart_node_path.clone()));
+            },
+            None => ()
         }
 
         dt.to_blob()
@@ -247,18 +259,32 @@ fn create_debug_console(dt: &DeviceTree, path: &String) -> Result<serial::Serial
     let parent = devicetree::get_parent(path);
     let cells = dt.get_address_size_cells(&parent);
 
-    /* the base address of the serial port is the first value in the reg list */
+    /* the MMIO base address of the serial port is the first value in the reg list.
+    the MMIO area size is the second value */
     let reg = match dt.get_property(path, &format!("reg"))
     {
         Ok(r) => r,
         Err(e) => return Err(e)
     };
 
-    /* the base address may be either 32-bit or 64-bit in size */
+    /* get the compatibility string for this controller.
+    allows us and guest kernels to know how to talk to this serial port */
+    let compat = match dt.get_property(path, &format!("compatible"))
+    {
+        Ok(c) => c,
+        Err(c) => return Err(c)
+    };
+
     match cells.address
     {
-        1 => Ok(serial::SerialPort::new(reg.as_multi_u32()?[0] as usize)),
-        2 => Ok(serial::SerialPort::new(reg.as_multi_u64()?[0] as usize)),
+        1 => Ok(serial::SerialPort::new(
+                    reg.as_multi_u32()?[0] as usize,
+                    reg.as_multi_u32()?[1] as usize,
+                    &compat.as_text()?)),
+        2 => Ok(serial::SerialPort::new(
+                    reg.as_multi_u64()?[0] as usize,
+                    reg.as_multi_u64()?[1] as usize,
+                    &compat.as_text()?)),
         _ => Err(DeviceTreeError::WidthUnsupported)
     }
 }
