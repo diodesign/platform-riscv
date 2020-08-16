@@ -9,6 +9,7 @@
 
 use core::fmt;
 use alloc::string::String;
+use super::physmem::PhysMemBase;
 
 extern "C"
 {
@@ -56,10 +57,15 @@ pub struct SupervisorState
     registers: [Reg; 31],
 }
 
-/* craft a blank supervisor CPU state using the given entry pointers */
-pub fn supervisor_state_from(entry: Entry) -> SupervisorState
+/* craft a blank supervisor CPU state and initialize it with the given entry paramters
+   this state will be used to start a supervisor kernel.
+   => cpu_nr = the CPU hart ID for this supervisor CPU core
+      entry = address where execution will start for this supervisor
+      dtb = physical address of the device tree blob describing
+            the supervisor's virtual hardware */
+pub fn init_supervisor_state(cpu_nr: CPUcount, entry: Entry, dtb: PhysMemBase) -> SupervisorState
 {
-    SupervisorState
+    let mut state = SupervisorState
     {
         sstatus: 0,
         stvec: 0,
@@ -74,7 +80,15 @@ pub fn supervisor_state_from(entry: Entry) -> SupervisorState
         pc: entry,
         sp: 0,
         registers: [0; 31]
-    }
+    };
+
+    /* supervisor CPU entry conditions (as expected by the Linux kernel):
+       x10 aka a0 = CPU hart ID
+       x11 aka a1 = environment's device tree blob
+       don't forget to skip over x0 (zero) which isn't included in the state */
+    state.registers[10 - 1] = cpu_nr;
+    state.registers[11 - 1] = dtb;
+    state
 }
 
 /* save the supervisor CPU state to memory. only call from an IRQ context
@@ -102,7 +116,7 @@ pub fn prep_supervisor_return()
     unsafe { platform_set_supervisor_return(); }
 }
 
-/* bit masks of CPU features and extenions taken from misa */
+/* bit masks of CPU features and extensions taken from misa */
 pub type CPUFeatures = usize;
 
 /* return the features bit mask of this CPU core */
@@ -140,6 +154,39 @@ pub fn previous_privilege() -> PrivilegeMode
     }
 }
 
+/* returns the running CPU core's ISA width in bits */
+pub fn get_isa_width() -> usize
+{
+    /* we should test misa for ISA width, though it's moot because
+    if the machine was, say, RV64, it would only boot an RV64-targeted
+    hypervisor due to differences in the RV32, RV64 and RV128 instruction
+    formats. for now, we can check the hypervisor target at build time.
+
+    TODO: check misa */
+
+    let isa_width = if cfg!(target_arch = "riscv32")
+    {
+        32
+    }
+    else if cfg!(target_arch = "riscv64")
+    {
+        64
+    }
+    else if cfg!(target_arch = "riscv128")
+    {
+        128
+    }
+    else
+    {
+        /* avoid panic() though in this case, if we're building for an
+        unexpected architecture, then something's gone quite wrong
+        and it's likely we haven't made it this far into runtime anyway */
+        panic!("Unexpected target architecture {}", cfg!(target_arch));
+    };
+
+    isa_width
+}
+
 /* define a RISC-V CPU extension in terms of its misa bit position and initial character */
 struct CPUExtension
 {
@@ -170,63 +217,36 @@ const EXTENSIONS: &'static[CPUExtension] =
         CPUExtension { bit: 25, initial: 'Z' }
     ];
 
-/* describe a CPU core in terms of its ISA width, extensions, and architecture code name */
-pub struct CPUDescription
-{
-    misa: usize,
-    marchid: usize
-}
+/* describe the running CPU core in terms of its ISA width, extensions, and architecture code name */
+pub struct CPUDescription;
 
 impl CPUDescription
 {
-    /* create a description of this CPU core */
-    pub fn new() -> CPUDescription
+    /* generate a string describing the ISA in the usual RISC-V format:
+    RV32 or RV64 followed by extension characters, all uppercase, no spaces,
+    eg: RV32IMAFD */
+    pub fn isa_to_string(&self) -> String
     {
-        CPUDescription
-        {
-            misa: read_csr!(misa),
-            marchid: read_csr!(marchid)
-        }
-    }
-}
-
-/* produce a human-readable version of the description */
-impl fmt::Debug for CPUDescription
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
-    {
-        /* ISA width is stored in upper 2 bits of misa */
-        let width_shift = if cfg!(target_arch = "riscv32")
-        {
-            32 - 2
-        }
-        else /* assumes RV128 is unsupported */
-        {
-            64 - 2
-        };
-
-        /* extract ISA width from misa to check this CPU.
-        bear in mind, if this is a 32-bit hypervisor, it won't
-        boot on a 64-bit system and vice versa */
-        let isa = match self.misa >> width_shift
-        {
-            1 => 32,
-            2 => 64,
-            _ => return Err(fmt::Error)
-        };
-
+        let misa = read_csr!(misa);
         let mut extensions = String::new();
-        for ext in EXTENSIONS
+        for extension in EXTENSIONS
         {
-            if self.misa & (1 << ext.bit) != 0
+            if misa & (1 << extension.bit) != 0
             {
-                extensions.push(ext.initial);
+                extensions.push(extension.initial);
             }
         }
 
+        /* combine ISA width and extension letters */
+        format!("RV{}{}", get_isa_width(), extensions)
+    }
+
+    /* return a string describing the CPU core's microarchitecture */
+    pub fn arch_to_string(&self) -> String
+    {
         /* taken from https://github.com/riscv/riscv-isa-manual/blob/master/marchid.md
         TODO: Automate this list? */
-        let architecture = match self.marchid
+        format!("{}", match read_csr!(marchid)
         {
             0 =>  "Qemu/Unknown",
             1 =>  "Rocket",
@@ -247,9 +267,17 @@ impl fmt::Debug for CPUDescription
             16 => "SweRV EL2",
             17 => "SweRV EH2",
             _ => "Unknown"
-        };
+        })
+    }
+}
 
-        /* put it all together */
-        write!(f, "RV{}{} ({})", isa, extensions, architecture)
+/* produce a human-readable version of the CPU description. for RISC-V,
+it's the ISA width and extensions followed by a space and then the
+microarchirecture in brackets, eg: RV64IMAFDC (Qemu/Unknown) */
+impl fmt::Debug for CPUDescription
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
+    {
+        write!(f, "{} ({})", self.isa_to_string(), self.arch_to_string())
     }
 }

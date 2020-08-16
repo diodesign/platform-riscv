@@ -8,12 +8,13 @@
  */
  
 extern crate devicetree;
-use devicetree::{DeviceTree, DeviceTreeBlob, DeviceTreeError};
+use devicetree::{DeviceTree, DeviceTreeBlob, DeviceTreeError, DeviceTreeProperty};
 
 use super::serial;
 use super::physmem;
 use super::timer;
 use super::errata;
+use super::cpu;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -154,6 +155,59 @@ impl Devices
         {
             s.next(usecs);
         }
+    }
+
+    /* create a virtualized environment based on the host's peripherals for guest supervisors.
+       => cpus = number of CPU cores in this virtual envuironment
+          ram_base = base physical address of the environment's contiguous RAM area
+          ram_size = number of bytes of the contiguous RAM area
+       <= array of bytes containing the device tree blob for the environment.
+          A zero-length array indicates a failure to produce the blob */
+    pub fn spawn_virtual_environment(&self, cpus: usize, ram_base: physmem::PhysMemBase, ram_size: physmem::PhysMemSize) -> Vec<u8>
+    {
+        let mut dt = DeviceTree::new();
+        dt.edit_property(&format!("/"), &format!("#address-cells"), DeviceTreeProperty::UnsignedInt32(2));
+        dt.edit_property(&format!("/"), &format!("#size-cells"), DeviceTreeProperty::UnsignedInt32(2));
+
+        /* define the system memory as four u32s: upper and lower RAM base, upper and lower RAM size */
+        let ram_base_hi = (ram_base as u64 >> 32) as u32;
+        let ram_base_lo = (ram_base & 0xffffffff) as u32;
+        let ram_size_hi = (ram_size as u64 >> 32) as u32;
+        let ram_size_lo = (ram_size & 0xffffffff) as u32;
+
+        dt.edit_property(&format!("/memory@{:x}", ram_base), &format!("reg"),
+            DeviceTreeProperty::MultipleUnsignedInt32
+            (
+                vec!(ram_base_hi, ram_base_lo, ram_size_hi, ram_size_lo)
+            ));
+
+        /* define the CPU cores */
+        let cpu_root_path = format!("/cpus");
+        dt.edit_property(&cpu_root_path, &format!("#address-cells"), DeviceTreeProperty::UnsignedInt32(1));
+        dt.edit_property(&cpu_root_path, &format!("#size-cells"), DeviceTreeProperty::UnsignedInt32(0));
+
+        for cpu in 0..cpus
+        {
+            let cpu_node_path = format!("{}/cpu@{}", &cpu_root_path, cpu);
+            dt.edit_property(&cpu_node_path, &format!("device_type"), DeviceTreeProperty::Text(format!("cpu")));
+            dt.edit_property(&cpu_node_path, &format!("reg"), DeviceTreeProperty::UnsignedInt32(cpu as u32));
+            dt.edit_property(&cpu_node_path, &format!("status"), DeviceTreeProperty::Text(format!("okay")));
+            dt.edit_property(&cpu_node_path, &format!("compatible"), DeviceTreeProperty::Text(format!("riscv")));
+            if cfg!(target_arch = "riscv32")
+            {
+                dt.edit_property(&cpu_node_path, &format!("mmu-type"), DeviceTreeProperty::Text(format!("riscv,sv32")));
+            }
+            else
+            {
+                dt.edit_property(&cpu_node_path, &format!("mmu-type"), DeviceTreeProperty::Text(format!("riscv,sv48")));
+            }
+
+            /* get the lower case ISA string */
+            let isa = (cpu::CPUDescription).isa_to_string().to_lowercase();
+            dt.edit_property(&cpu_node_path, &format!("riscv,isa"), DeviceTreeProperty::Text(isa));
+        }
+
+        dt.to_blob()
     }
 }
 
