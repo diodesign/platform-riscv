@@ -206,7 +206,7 @@ impl Devices
                 let size = con.get_mmio_size();
                 let compat = con.get_compatibility().clone();
 
-                let uart_node_path = format!("/uart@{}", phys_base);
+                let uart_node_path = format!("/uart@{:x}", phys_base);
                 dt.edit_property(&uart_node_path, &format!("reg"),
                     DeviceTreeProperty::MultipleUnsignedInt64_64(vec!((phys_base as u64, size as u64))));
                 dt.edit_property(&uart_node_path, &format!("status"), DeviceTreeProperty::Text(format!("okay")));
