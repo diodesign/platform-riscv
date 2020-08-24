@@ -159,11 +159,12 @@ impl Devices
 
     /* create a virtualized environment based on the host's peripherals for guest supervisors.
        => cpus = number of CPU cores in this virtual envuironment
+          boot_cpu_id = ID of CPU core that can or will boot the system
           ram_base = base physical address of the environment's contiguous RAM area
           ram_size = number of bytes of the contiguous RAM area
-       <= array of bytes containing the device tree blob for the environment.
-          A zero-length array indicates a failure to produce the blob */
-    pub fn spawn_virtual_environment(&self, cpus: usize, ram_base: physmem::PhysMemBase, ram_size: physmem::PhysMemSize) -> Vec<u8>
+       <= array of bytes containing the device tree blob for the environment,
+          or None for failure */
+    pub fn spawn_virtual_environment(&self, cpus: usize, boot_cpu_id: u32, ram_base: physmem::PhysMemBase, ram_size: physmem::PhysMemSize) -> Option<Vec<u8>>
     {
         let mut dt = DeviceTree::new();
         dt.edit_property(&format!("/"), &format!("#address-cells"), DeviceTreeProperty::UnsignedInt32(2));
@@ -219,7 +220,12 @@ impl Devices
             None => ()
         }
 
-        dt.to_blob()
+        dt.set_boot_cpu_id(boot_cpu_id);
+        match dt.to_blob()
+        {
+            Ok(v) => Some(v),
+            Err(_) => None
+        }
     }
 }
 
