@@ -6,6 +6,7 @@
  */
 
 use core::intrinsics::transmute;
+use super::cpu;
 
 /* we need this code from the assembly files */
 extern "C"
@@ -288,19 +289,27 @@ fn pmp_protect(region_id: usize, base: usize, end: usize, access: AccessPermissi
       value = settings flags to write (only low byte is used) */
 fn write_pmp_entry(entry_id: usize, value: usize)
 {
-    let (pmp_cfg_id, offset) = if cfg!(target_arch = "riscv32")
+    let (pmp_cfg_id, offset) = match cpu::get_isa_width()
     {
-        /* four PMP entries to a 32-bit pmpcfg register */
-        let pmp_cfg_id = entry_id >> 2;
-        let offset = entry_id - (pmp_cfg_id << 2);
-        (pmp_cfg_id, offset)
-    }
-    else /* assumes RV128 is not supported */
-    {
-        /* eight PMP entries to a 64-bit pmpcfg register */
-        let pmp_cfg_id = entry_id >> 3;
-        let offset = entry_id - (pmp_cfg_id << 3);
-        (pmp_cfg_id, offset)
+        32 =>
+        {
+            /* four PMP entries to a 32-bit pmpcfg register */
+            let pmp_cfg_id = entry_id >> 2;
+            let offset = entry_id - (pmp_cfg_id << 2);
+            (pmp_cfg_id, offset)
+        },
+
+        64 =>
+        {
+            /* eight PMP entries to a 64-bit pmpcfg register */
+            let pmp_cfg_id = entry_id >> 3;
+            let offset = entry_id - (pmp_cfg_id << 3);
+            (pmp_cfg_id, offset)
+        },
+
+        /* avoid panic() though in this case, we're targeting an unsupported
+        architecture, so quit while we're behind */
+        w => panic!("Can't write PMP entry: unsupported ISA width {}", w)
     };
 
     /* eight bits per PMP entry. use masking to avoid changing other entries' settings */

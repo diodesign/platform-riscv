@@ -5,6 +5,8 @@
  * See LICENSE for usage and copying.
  */
 
+use super::cpu;
+
 /* describe the type of interruption */
 #[derive(Copy, Clone)]
 pub enum IRQType
@@ -83,15 +85,9 @@ pub struct IRQContext
 */
 pub fn dispatch(context: IRQContext) -> IRQ
 {
-    /* top most bit of mcause sets what caused the IRQ: hardware or software interrupt */
-    let cause_shift = if cfg!(target_arch = "riscv32")
-    {
-        31
-    }
-    else /* assumes RV128 not supported */
-    {
-        63
-    };
+    /* top most bit of mcause sets what caused the IRQ: hardware or software interrupt
+    thus, we need to know the width of the mcause CSR to access that top bit */
+    let cause_shift = cpu::get_isa_width() - 1;
 
     /* convert RISC-V cause codes into generic codes for the hypervisor.
     the top bit of the cause code is set for interrupts and clear for execeptions */

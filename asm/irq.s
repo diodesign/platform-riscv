@@ -26,12 +26,15 @@ irq_early_init:
   csrrw x0, mtvec, t0
 
   # delegate most exceptions to the supervisor guest kernel
-  # so that it can deal with them direct
-  # 0xb3ff = all exceptions (0-15) delegated except:
+  # so that it can deal with them direct. for a given exception,
+  # bit = 1 to delegate, 0 = pass to the machine-level hypervisor 
+  # 0xb1f7 = all exceptions (0-15) delegated except:
+  # 03: breakpoint
+  # 09: environment call from supervisor mode
   # 10: reserved
   # 11: environment call from machine mode
   # 14: reserved
-  li    t0, 0xb3ff
+  li    t0, 0xb1f7
   csrrw x0, medeleg, t0
 
   # don't delegate any interrupts
