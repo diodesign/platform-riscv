@@ -173,6 +173,8 @@ impl Devices
         /* define the system memory's base physical address and size */
         dt.edit_property(&format!("/memory@{:x}", ram_base), &format!("reg"),
             DeviceTreeProperty::MultipleUnsignedInt64_64(vec!((ram_base as u64, ram_size as u64))));
+        dt.edit_property(&format!("/memory@{:x}", ram_base), &format!("device_type"),
+            DeviceTreeProperty::Text(format!("memory")));
 
         /* define the CPU cores */
         let cpu_root_path = format!("/cpus");
