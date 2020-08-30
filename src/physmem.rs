@@ -457,6 +457,7 @@ pub fn validate_pmp_phys_addr(addr: usize) -> Option<usize>
             addresses are stored without their lowest 2 bits */
             let addr_lo = read_pmp_addr(lo_index) << 2;
             let addr_hi = read_pmp_addr(hi_index) << 2;
+
             if addr >= addr_lo && addr < addr_hi
             {
                 /* in range and readable */
@@ -474,7 +475,7 @@ pmp0cfg...pmp3cfg are in pmpcfg0, pmp4cfg...pmp7cfg are in pmpcfg1, etc */
 fn get_pmp_cfg_byte(index: usize) -> u8
 {
     let register = (index >> 2) & 0b11;
-    let byte_index = index & 0b11;
+    let byte_index = (index & 0b11) * 8;
 
     let word = read_pmpcfg(register);
     let byte = (word >> byte_index) & 0xff;
@@ -487,7 +488,7 @@ pmp0cfg...pmp7cfg are in pmpcfg0, pmp8cfg...pmp15cfg are in pmpcfg0 */
 fn get_pmp_cfg_byte(index: usize) -> u8
 {
     let register = (index >> 3) & 0b1;
-    let byte_index = index & 0b111;
+    let byte_index = (index & 0b111) * 8;
 
     let word = read_pmpcfg(register * 2);
     let byte = (word >> byte_index) & 0xff;
