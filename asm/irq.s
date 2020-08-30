@@ -28,13 +28,14 @@ irq_early_init:
   # delegate most exceptions to the supervisor guest kernel
   # so that it can deal with them direct. for a given exception,
   # bit = 1 to delegate, 0 = pass to the machine-level hypervisor 
-  # 0xb1f7 = all exceptions (0-15) delegated except:
+  # 0xb1f3 = delegate all exceptions (0-15) except:
+  # 02: illegal instruction (catch in case we need to implement a feature)
   # 03: breakpoint
   # 09: environment call from supervisor mode
   # 10: reserved
   # 11: environment call from machine mode
   # 14: reserved
-  li    t0, 0xb1f7
+  li    t0, 0xb1f3
   csrrw x0, medeleg, t0
 
   # don't delegate any interrupts

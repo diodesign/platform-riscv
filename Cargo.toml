@@ -6,6 +6,15 @@ license = "MIT"
 edition = "2018"
 publish = false
 
+# external dependencies
+[dependencies.spin]
+version = "0.5.2"
+
+[dependencies.lazy_static]
+version = "1.4.0"
+features = [ "spin_no_std" ]
+
+# local dependencies
 [dependencies.devicetree]
 path = "../devicetree"
 

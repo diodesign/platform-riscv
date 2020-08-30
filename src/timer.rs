@@ -5,6 +5,9 @@
  * See LICENSE for usage and copying.
  */
 
+use spin::Mutex;
+use super::physmem;
+
 extern "C"
 {
     fn platform_timer_irq_enable();
@@ -12,7 +15,11 @@ extern "C"
     fn platform_timer_now(clint_base: physmem::PhysMemBase) -> u64;
 }
 
-use super::physmem;
+lazy_static!
+{
+    /* acquire PINNED_TIMER lock before accessing the timer */
+    static ref PINNED_TIMER: Mutex<Option<Timer>> = Mutex::new(None);
+}
 
 /* divide timer frequency down into ticks per microsecond (1 millionth) */
 const MILLION: u64 = 1 * 1000 * 1000;
@@ -41,6 +48,13 @@ impl Timer
         }
     }
 
+    /* register this timer as the pinned timer, allowing other platform code to find it */
+    pub fn pin(&self)
+    {
+        let mut pinned = PINNED_TIMER.lock();
+        *pinned = Some(self.clone());
+    }
+
     /* return base MMIO address of timer */
     pub fn get_mmio_base(&self) -> physmem::PhysMemBase { self.clint_base }
 
@@ -56,11 +70,32 @@ impl Timer
         unsafe { platform_timer_irq_enable(); }
     }
 
+    /* return the current timer value right now in microseconds.
+    this is a clock-on-the-wall value in that it doesn't reset,
+    always incremements at a fixed rate, though will rollover to 0 */
+    pub fn now(&self) -> u64
+    {
+        let value = unsafe { platform_timer_now(self.clint_base) };
+        (value / self.frequency) * MILLION
+    }
+
     /* define duration until this CPU core's timer next triggers an IRQ.
        => usecs = number of microseconds (millionths of a second) from now to interrupt */
     pub fn next(&self, usecs: u64)
     {
         let target = ((self.frequency / MILLION) * usecs) + unsafe { platform_timer_now(self.clint_base) };
         unsafe { platform_timer_target(target, self.clint_base); }
+    }
+}
+
+/* return the current value of the pinned timer in microseconds,
+or None for no pinned timer */
+pub fn get_pinned_timer_now() -> Option<u64>
+{
+    let pinned = PINNED_TIMER.lock();
+    match *pinned
+    {
+        Some(timer) => Some(timer.now()),
+        None => None
     }
 }

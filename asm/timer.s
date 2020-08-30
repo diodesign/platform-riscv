@@ -57,12 +57,14 @@ platform_timer_target:
 platform_timer_now:
   li  t0, mtime
 .if ptrwidth == 32
-  add t0, t0, a0      # get final address of mtimecmp from CLINT base address in a0
-  lw  a1, 4(t0)       # 32-bit CPUs have to read hi then lo
+  add t0, t0, a0                  # get final address of mtime from CLINT base address in a0
+  lw  a1, 4(t0)                   # 32-bit CPUs have to read hi then lo
   lw  a0, 0(t0)
+  lw  t1, 4(t0)                   # re-read the high word again
+  bne a1, t1, platform_timer_now  # try again if a high-word rollover occurred
 .else
-  add t0, t0, a0      # get final address of mtimecmp from CLINT base address in a0
-  ld  a0, 0(t0)       # 64-bit CPUs can just read a whole double word
+  add t0, t0, a0                  # get final address of mtime from CLINT base address in a0
+  ld  a0, 0(t0)                   # 64-bit CPUs can just read a whole double word
 .endif
   ret
 

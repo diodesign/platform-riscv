@@ -1,6 +1,6 @@
 /* diosix RV32G/RV64G common exception/interrupt hardware-specific code
  *
- * (c) Chris Williams, 2019.
+ * (c) Chris Williams, 2019-2020.
  *
  * See LICENSE for usage and copying.
  */
@@ -15,7 +15,17 @@ pub enum IRQType
     Interrupt, /* hardware-generated interrupt */
 }
 
-#[derive(Debug, Copy, Clone)]
+/* guide the hypervisor on whether to kill the running environment
+as a result of this interrupt or exception. the hypervisor can
+overrule it as required */
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum IRQSeverity
+{
+    Fatal, /* this IRQ should terminate the running environment */
+    NonFatal /* this IRQ should not terminate the running environment */
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum IRQCause
 {
     /* software interrupt generated from user, supervisor or hypervisor mode */
@@ -55,7 +65,7 @@ pub enum IRQCause
 /* describe IRQ in high-level, portable terms */
 pub struct IRQ
 {
-    pub fatal: bool, /* true if this IRQ means current supervisor must stop */
+    pub severity: IRQSeverity, /* hint whether this should be fatal or not */
     pub privilege_mode: crate::cpu::PrivilegeMode, /* privilege level of the interrupted code */
     pub irq_type: IRQType, /* type of the IRQ - sw or hw generated */
     pub cause: IRQCause, /* cause of this interruption */
@@ -70,20 +80,21 @@ Note: register x2 is normally sp but in this case contains the
 #[derive(Debug, Copy, Clone)]
 pub struct IRQContext
 {
-    cause: usize,
-    epc: usize,             /* cause code and PC when IRQ fired */
-    mtval: usize,           /* IRQ specific information */
-    sp: usize,              /* stack pointer in interrupted environment */
-    registers: [usize; 32], /* all 32 registers stacked */
+    pub cause: usize,
+    pub epc: usize,             /* cause code and PC when IRQ fired */
+    pub mtval: usize,           /* IRQ specific information */
+    pub sp: usize,              /* stack pointer in interrupted environment */
+    pub registers: [usize; 32], /* all 32 registers stacked */
 }
 
 /* dispatch
    Handle incoming IRQs: software exceptions and hardware interrupts
    for the high-level hypervisor.
    => context = context from the low-level code that picked up the IRQ
-   <= return high-level description of the IRQ for the portable hypervisor
+   <= return high-level description of the IRQ for the portable hypervisor,
+      or None for no further action needs to be taken
 */
-pub fn dispatch(context: IRQContext) -> IRQ
+pub fn dispatch(context: IRQContext) -> Option<IRQ>
 {
     /* top most bit of mcause sets what caused the IRQ: hardware or software interrupt
     thus, we need to know the width of the mcause CSR to access that top bit */
@@ -97,46 +108,51 @@ pub fn dispatch(context: IRQContext) -> IRQ
         _ => IRQType::Interrupt,
     };
     let cause_mask = (1 << cause_shift) - 1;
-    let (fatal, cause) = match (cause_type, context.cause & cause_mask)
+    let (severity, cause) = match (cause_type, context.cause & cause_mask)
     {
         /* exceptions - some are labeled fatal */
-        (IRQType::Exception, 0) => (true, IRQCause::InstructionAlignment),
-        (IRQType::Exception, 1) => (true, IRQCause::InstructionAccess),
-        (IRQType::Exception, 2) => (true, IRQCause::IllegalInstruction),
-        (IRQType::Exception, 3) => (true, IRQCause::Breakpoint),
-        (IRQType::Exception, 4) => (true, IRQCause::LoadAlignment),
-        (IRQType::Exception, 5) => (true, IRQCause::LoadAccess),
-        (IRQType::Exception, 6) => (true, IRQCause::StoreAlignment),
-        (IRQType::Exception, 7) => (true, IRQCause::StoreAccess),
-        (IRQType::Exception, 8) => (false, IRQCause::UserEnvironmentCall),
-        (IRQType::Exception, 9) => (false, IRQCause::SupervisorEnvironmentCall),
-        (IRQType::Exception, 11) => (false, IRQCause::HypervisorEnvironmentCall),
-        (IRQType::Exception, 12) => (false, IRQCause::InstructionPageFault),
-        (IRQType::Exception, 13) => (false, IRQCause::LoadPageFault),
-        (IRQType::Exception, 15) => (false, IRQCause::StorePageFault),
+        (IRQType::Exception, 0) => (IRQSeverity::Fatal, IRQCause::InstructionAlignment),
+        (IRQType::Exception, 1) => (IRQSeverity::Fatal, IRQCause::InstructionAccess),
+        (IRQType::Exception, 2) => (IRQSeverity::Fatal, IRQCause::IllegalInstruction),
+        (IRQType::Exception, 3) => (IRQSeverity::Fatal, IRQCause::Breakpoint),
+        (IRQType::Exception, 4) => (IRQSeverity::Fatal, IRQCause::LoadAlignment),
+        (IRQType::Exception, 5) => (IRQSeverity::Fatal, IRQCause::LoadAccess),
+        (IRQType::Exception, 6) => (IRQSeverity::Fatal, IRQCause::StoreAlignment),
+        (IRQType::Exception, 7) => (IRQSeverity::Fatal, IRQCause::StoreAccess),
+        (IRQType::Exception, 8) => (IRQSeverity::NonFatal, IRQCause::UserEnvironmentCall),
+        (IRQType::Exception, 9) => (IRQSeverity::NonFatal, IRQCause::SupervisorEnvironmentCall),
+        (IRQType::Exception, 11) => (IRQSeverity::NonFatal, IRQCause::HypervisorEnvironmentCall),
+        (IRQType::Exception, 12) => (IRQSeverity::NonFatal, IRQCause::InstructionPageFault),
+        (IRQType::Exception, 13) => (IRQSeverity::NonFatal, IRQCause::LoadPageFault),
+        (IRQType::Exception, 15) => (IRQSeverity::NonFatal, IRQCause::StorePageFault),
 
         /* interrupts - none are fatal */
-        (IRQType::Interrupt, 0) => (false, IRQCause::UserSWI),
-        (IRQType::Interrupt, 1) => (false, IRQCause::SupervisorSWI),
-        (IRQType::Interrupt, 3) => (false, IRQCause::HypervisorSWI),
-        (IRQType::Interrupt, 4) => (false, IRQCause::UserTimer),
-        (IRQType::Interrupt, 5) => (false, IRQCause::SupervisorTimer),
-        (IRQType::Interrupt, 7) => (false, IRQCause::HypervisorTimer),
-        (IRQType::Interrupt, 8) => (false, IRQCause::UserInterrupt),
-        (IRQType::Interrupt, 9) => (false, IRQCause::SupervisorInterrupt),
-        (IRQType::Interrupt, 11) => (false, IRQCause::HypervisorInterrupt),
-        (_, _) => (false, IRQCause::Unknown),
+        (IRQType::Interrupt, 0) => (IRQSeverity::NonFatal, IRQCause::UserSWI),
+        (IRQType::Interrupt, 1) => (IRQSeverity::NonFatal, IRQCause::SupervisorSWI),
+        (IRQType::Interrupt, 3) => (IRQSeverity::NonFatal, IRQCause::HypervisorSWI),
+        (IRQType::Interrupt, 4) => (IRQSeverity::NonFatal, IRQCause::UserTimer),
+        (IRQType::Interrupt, 5) => (IRQSeverity::NonFatal, IRQCause::SupervisorTimer),
+        (IRQType::Interrupt, 7) => (IRQSeverity::NonFatal, IRQCause::HypervisorTimer),
+        (IRQType::Interrupt, 8) => (IRQSeverity::NonFatal, IRQCause::UserInterrupt),
+        (IRQType::Interrupt, 9) => (IRQSeverity::NonFatal, IRQCause::SupervisorInterrupt),
+        (IRQType::Interrupt, 11) => (IRQSeverity::NonFatal, IRQCause::HypervisorInterrupt),
+        (_, _) => (IRQSeverity::NonFatal, IRQCause::Unknown),
     };
 
-    /* return structure describing this exception to the high-level hypervisor */
-    IRQ {
-        fatal: fatal,
-        irq_type: cause_type,
-        cause: cause,
-        privilege_mode: crate::cpu::previous_privilege(),
-        pc: context.epc as usize,
-        sp: context.sp as usize,
-    }
+    /* return structure describing this exception to
+    the high-level hypervisor for it to deal with */
+    Some
+    (
+        IRQ
+        {
+            severity: severity,
+            irq_type: cause_type,
+            cause: cause,
+            privilege_mode: crate::cpu::previous_privilege(),
+            pc: context.epc as usize,
+            sp: context.sp as usize,
+        }
+    )
 }
 
 /* clear an interrupt condition so we can return without the IRQ firing immediately. */

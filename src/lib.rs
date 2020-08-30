@@ -7,10 +7,18 @@
 
 #![no_std]
 #![feature(llvm_asm)]
+
+/* basic data structures */
 #[macro_use]
 extern crate alloc;
 
+/* needed to parse and generate device tree blobs */
 extern crate devicetree;
+
+/* needed for lazyily-allocated static variables, and atomic ops */
+#[macro_use]
+extern crate lazy_static;
+extern crate spin;
 
 /* expose architecture common code to platform-specific code */
 #[macro_use]
@@ -25,3 +33,5 @@ pub mod timer;
 pub mod test;
 pub mod devices;
 pub mod errata;
+pub mod mmu;
+pub mod instructions;

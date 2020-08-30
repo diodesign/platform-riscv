@@ -106,7 +106,11 @@ impl Devices
                 {
                     match get_system_timer(&parsed, &path)
                     {
-                        Ok(t) => Some(t),
+                        Ok(t) =>
+                        {
+                            t.pin(); /* pin this timer for other platform code */
+                            Some(t)
+                        },
                         Err(_) => None /* would be nice to flag up error */
                     }
                 }
@@ -146,6 +150,19 @@ impl Devices
         {
             s.start();
         }
+    }
+
+    /* return the timer's current value, or None if no timer
+    this is a clock-on-the-wall timer in that its value always
+    increases and never resets (though may rollover to 0) */
+    pub fn scheduler_timer_now(&self) -> Option<u64>
+    {
+        if let Some(s) = self.scheduler_timer
+        {
+            return Some(s.now());
+        }
+
+        None
     }
 
     /* interrupt this CPU core in usecs microseconds using periodic timer */
