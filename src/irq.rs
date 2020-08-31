@@ -73,18 +73,15 @@ pub struct IRQ
     pub sp: usize,   /* stack pointer for interrupted supervisor */
 }
 
-/* Hardware-specific data from low-level IRQ handler.
-Note: register x2 is normally sp but in this case contains the
-      top of the IRQ handler stack */
+/* Hardware-specific data from low-level IRQ handler */
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct IRQContext
 {
-    pub cause: usize,
-    pub epc: usize,             /* cause code and PC when IRQ fired */
-    pub mtval: usize,           /* IRQ specific information */
-    pub sp: usize,              /* stack pointer in interrupted environment */
-    pub registers: [usize; 32], /* all 32 registers stacked */
+    /* all 32 registers stacked. the contents of this array will be
+    loaded into the registers on exit from the IRQ, so if you want
+    to modify any register content, do it here */
+    pub registers: [usize; 32],
 }
 
 /* dispatch
@@ -99,16 +96,17 @@ pub fn dispatch(context: IRQContext) -> Option<IRQ>
     /* top most bit of mcause sets what caused the IRQ: hardware or software interrupt
     thus, we need to know the width of the mcause CSR to access that top bit */
     let cause_shift = cpu::get_isa_width() - 1;
+    let mcause = read_csr!(mcause);
 
     /* convert RISC-V cause codes into generic codes for the hypervisor.
     the top bit of the cause code is set for interrupts and clear for execeptions */
-    let cause_type = match context.cause >> cause_shift
+    let cause_type = match mcause >> cause_shift
     {
         0 => IRQType::Exception,
         _ => IRQType::Interrupt,
     };
     let cause_mask = (1 << cause_shift) - 1;
-    let (severity, cause) = match (cause_type, context.cause & cause_mask)
+    let (severity, cause) = match (cause_type, mcause & cause_mask)
     {
         /* exceptions - some are labeled fatal */
         (IRQType::Exception, 0) => (IRQSeverity::Fatal, IRQCause::InstructionAlignment),
@@ -149,8 +147,8 @@ pub fn dispatch(context: IRQContext) -> Option<IRQ>
             irq_type: cause_type,
             cause: cause,
             privilege_mode: crate::cpu::previous_privilege(),
-            pc: context.epc as usize,
-            sp: context.sp as usize,
+            pc: read_csr!(mepc),
+            sp: context.registers[2], /* x2 = sp */
         }
     )
 }

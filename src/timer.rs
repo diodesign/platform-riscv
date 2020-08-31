@@ -79,6 +79,12 @@ impl Timer
         (value / self.frequency) * MILLION
     }
 
+    /* return the exact contents of the current timer right now */
+    pub fn now_exact(&self) -> u64
+    {
+        unsafe { platform_timer_now(self.clint_base) }
+    }
+
     /* define duration until this CPU core's timer next triggers an IRQ.
        => usecs = number of microseconds (millionths of a second) from now to interrupt */
     pub fn next(&self, usecs: u64)
@@ -88,14 +94,13 @@ impl Timer
     }
 }
 
-/* return the current value of the pinned timer in microseconds,
-or None for no pinned timer */
-pub fn get_pinned_timer_now() -> Option<u64>
+/* return the current value of the pinned timer, or None for no pinned timer */
+pub fn get_pinned_timer_now_exact() -> Option<u64>
 {
     let pinned = PINNED_TIMER.lock();
     match *pinned
     {
-        Some(timer) => Some(timer.now()),
+        Some(timer) => Some(timer.now_exact()),
         None => None
     }
 }

@@ -9,6 +9,7 @@
 
 use super::irq::IRQContext;
 use super::cpu::PrivilegeMode;
+use super::physmem;
 use super::timer;
 use super::mmu;
 
@@ -40,7 +41,7 @@ pub fn emulate(priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationR
     let addr = match priv_mode
     {
         /* if it's in the hypervisor, epc will be the physical address we need */
-        PrivilegeMode::Hypervisor => context.epc,
+        PrivilegeMode::Hypervisor => read_csr!(mepc) as u64,
 
         /* if it's in a supervisor, we need to walk the page tables.
         we can't be certain mtval contains the faulting instruction.
@@ -49,7 +50,7 @@ pub fn emulate(priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationR
         {
             /* either use the translated supervisor -> hypervisor physical address
             or bail out */
-            match mmu::supervisor_addr_to_phys(context.epc)
+            match mmu::supervisor_addr_to_phys(read_csr!(mepc) as u64)
             {
                 Some(phys) => phys,
                 None => return EmulationResult::CantAccess
@@ -59,49 +60,60 @@ pub fn emulate(priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationR
         _ => return EmulationResult::CantAccess
     };
 
+    /* check we're reading from inside the supervisor environment */
+    if physmem::validate_pmp_phys_addr(addr).is_none() == true
+    {
+        return EmulationResult::CantAccess;
+    }
+
     let instruction = unsafe { *(addr as *const u32) as u32 };
 
     /* try to enulate the rdtime instruction, which reads the 64-bit real-time clock.
     on rv32, the low 32-bits are returned. on rv64, all bits are returned */
     if (instruction & RDTIME_MASK) == RDTIME_INST
     {
-        let time_now = match timer::get_pinned_timer_now()
+        let time_now = match timer::get_pinned_timer_now_exact()
         {
             Some(t) => t as usize,
             None => return EmulationResult::CantEmulate
         };
 
+        /* update destination register with current (low) word of the timer */
         let rd = ((instruction & !RDTIME_MASK) >> 7) & RDTIME_MASK;
-        qemuprint::println!("rdtime rd = {}", rd);
         context.registers[rd as usize] = time_now;
 
+        increment_epc(); /* go to next instuction */
         return EmulationResult::Success;
     }
 
     /* try to enulate the rdtime instruction, which reads the upper 32 bites of the
     64-bit real-time clock. instruction doesn't exist on non-rv32i systems */
-    if (instruction & RDTIMEH_MASK) == RDTIMEH_INST
+    if cfg!(target_arch = "riscv32")
     {
-        if cfg!(target_arch = "riscv32")
+        if (instruction & RDTIMEH_MASK) == RDTIMEH_INST
         {
-            let time_now = match timer::get_pinned_timer_now()
+            let time_now = match timer::get_pinned_timer_now_exact()
             {
                 Some(t) => t as u64,
                 None => return EmulationResult::CantEmulate
             };
 
+            /* update destination register with current high word of the timer */
             let rd = ((instruction & !RDTIME_MASK) >> 7) & RDTIME_MASK;
             context.registers[rd as usize] = (time_now >> 32) as usize;
 
+            increment_epc(); /* go to next instuction */
             return EmulationResult::Success;
-        }
-        else
-        {
-            /* strictly speaking, rv64i systems don't have this instruction */
-            return EmulationResult::IllegalInstruction;
         }
     }
 
     /* fall through to a confirmed illegal instruction */
     EmulationResult::IllegalInstruction
+}
+
+/* incrememnt epc to the next 32-bit instruction */
+fn increment_epc()
+{
+    let epc = read_csr!(mepc);
+    write_csr!(mepc, epc + 4);
 }

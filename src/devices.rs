@@ -198,6 +198,16 @@ impl Devices
         dt.edit_property(&cpu_root_path, &format!("#address-cells"), DeviceTreeProperty::UnsignedInt32(1));
         dt.edit_property(&cpu_root_path, &format!("#size-cells"), DeviceTreeProperty::UnsignedInt32(0));
 
+        match self.parsed.get_property(&format!("/cpus"), &format!("timebase-frequency"))
+        {
+            Ok(prop) => if let Ok(freq) = prop.as_u32()
+            {
+                dt.edit_property(&cpu_root_path, &format!("timebase-frequency"),
+                    DeviceTreeProperty::UnsignedInt32(freq));
+            },
+            Err(_) => () /* todo: should we guess the timebase frequency instead? */
+        }
+
         for cpu in 0..cpus
         {
             let cpu_node_path = format!("{}/cpu@{}", &cpu_root_path, cpu);

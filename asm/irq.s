@@ -72,10 +72,11 @@ irq_early_init:
 # be discarded. do not enable hardware interrupts. any exceptions will be unfortunate.
 irq_machine_handler:
   # get exception handler stack from mscratch by swapping it for interrupted code's sp
+  # the handler stack descends from mscratch, the per-CPU variables ascend from it
   csrrw  sp, mscratch, sp
   # now: sp = top of IRQ stack. mscratch = interrupted code's sp
 
-  # save space to preserve all 32 GP registers
+  # reserve space to preserve all 32 GP registers
   addi  sp, sp, -(IRQ_REGISTER_FRAME_SIZE)
   # skip x0 (zero) and x2 (sp), stack all other registers
   PUSH_REG 1
@@ -85,21 +86,18 @@ irq_machine_handler:
     .set reg, reg + 1
   .endr
 
-  # right now mscratch is corrupt with the interrupted code's sp.
-  # this means hypervisor functions relying on mscratch will break unless it is restored.
-  # calculate original mscratch value into s11, and swap with mscratch
-  addi  s11, sp, IRQ_REGISTER_FRAME_SIZE
-  csrrw s11, mscratch, s11
-  # now: s11 = interrupted code's sp. mscratch = top of IRQ stack
-
-  # gather up the cause, faulting/triggering instruction address, memory address
-  # relevant to the exception or interrupt, and interrupted code's stack pointer,
-  # and store on the IRQ handler's stack
+  # stack the interrupted code's sp as x2 (sp) in register block
+  csrrs t0, mscratch, x0
 .if ptrwidth == 32
-  addi  sp, sp, -(4 * 4)  # four 32-bit words
+  sw    t0, (2 * 4)(sp)
 .else
-  addi  sp, sp, -(4 * 8)  # four 64-bit words
+  sd    t0, (2 * 8)(sp)
 .endif
+
+  # right now mscratch is corrupt with the interrupted code's sp.
+  # this means hypervisor functions relying on mscratch will break, so restore it.
+  addi  t0, sp, IRQ_REGISTER_FRAME_SIZE
+  csrrw x0, mscratch, t0
 
   # for syscalls, riscv sets epc to the address of the syscall instruction.
   # in which case, we need to advance epc 4 bytes to the next instruction.
@@ -108,8 +106,6 @@ irq_machine_handler:
   # could schedule in another context, so incrementing epc after kirq_handler
   # may break a newly scheduled context. we increment mepc directly so that if another
   # context isn't scheduled in, epc will be correct.
-  #
-  # note: mepc, sp (via s11) and stacked regs are updated by the context switch code
   csrrs t0, mcause, x0
   csrrs t1, mepc, x0
   li    t2, 9             # mcause = 9 for environment call from supervisor-to-hypervisor
@@ -118,36 +114,10 @@ irq_machine_handler:
   csrrw x0, mepc, t1
 
 continue:
-  csrrs t2, mtval, x0
-.if ptrwidth == 32
-  sw    t0, 0(sp)       # 32-bit mcause
-  sw    t1, 4(sp)       # 32-bit mepc
-  sw    t2, 8(sp)       # 32-bit mtval
-  sw    s11, 12(sp)     # 32-bit interrupted code's sp
-.else
-  sd    t0, 0(sp)       # 64-bit mcause
-  sd    t1, 8(sp)       # 64-bit mepc
-  sd    t2, 16(sp)      # 64-bit mtval
-  sd    s11, 24(sp)     # 64-bit interrupted code's sp
-.endif
-
   # pass current sp to exception/hw handler as a pointer. this'll allow
-  # the higher-level hypervisor access the context of the IRQ.
-  # it musn't corrupt s11, a callee-saved register
+  # the higher-level hypervisor access and modify any of the stacked registers
   add   a0, sp, x0
   call  hypervisor_irq_handler
-
-  # swap back mscratch so interrupted code's sp can be restored
-  csrrw s11, mscratch, s11
-  # now: mscratch = interrupted code's sp. s11 = top of IRQ stack
-
-  # fix up the stack from the cause, epc, sp, etc pushes
-  # the context switching code updates stacked registers, mepc and sp (via s11)
-.if ptrwidth == 32
-  addi  sp, sp, (4 * 4)   # four 32-bit words
-.else
-  addi  sp, sp, (4 * 8)   # four 64-bit words
-.endif
 
   # restore all stacked registers, skipping zero (x0) and sp (x2)
   .set reg, 31
@@ -157,10 +127,6 @@ continue:
   .endr
   PULL_REG 1
 
-  # fix up exception handler sp
-  addi  sp, sp, IRQ_REGISTER_FRAME_SIZE
-
-  # swap top of IRQ sp for interrupted code's sp, and return
-  csrrw sp, mscratch, sp
-  # i will return. i will have my revenge!
+  # finally, restore the interrupted code's sp and return
+  PULL_REG 2
   mret

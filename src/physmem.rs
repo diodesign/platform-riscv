@@ -437,7 +437,7 @@ fn read_pmp_addr(register: usize) -> usize
 
 /* check the given address is within a valid PMP range as a read operation.
 returns addr if valid, or None if not */
-pub fn validate_pmp_phys_addr(addr: usize) -> Option<usize>
+pub fn validate_pmp_phys_addr(addr: u64) -> Option<u64>
 {
     /* look up pairs of pmpcfg bytes that define PMP regions */
     for pmpcfg_index in 0..8
@@ -455,8 +455,8 @@ pub fn validate_pmp_phys_addr(addr: usize) -> Option<usize>
             /* this is a TOR PMP region that is readable. now check the
             address is within range. shift up 2 because the region range
             addresses are stored without their lowest 2 bits */
-            let addr_lo = read_pmp_addr(lo_index) << 2;
-            let addr_hi = read_pmp_addr(hi_index) << 2;
+            let addr_lo = (read_pmp_addr(lo_index) << 2) as u64;
+            let addr_hi = (read_pmp_addr(hi_index) << 2) as u64;
 
             if addr >= addr_lo && addr < addr_hi
             {
