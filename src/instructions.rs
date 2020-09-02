@@ -28,7 +28,7 @@ const RDTIME_MASK: u32  = !(0x1f << 7);
 const RDTIMEH_INST: u32 = 0xc81 << 20 | 2 << 12 | 0x1c << 2 | 3;
 const RDTIMEH_MASK: u32 = !(0x1f << 7);
 
-/* attempt to emulate an instruction. this can use and modify
+/* attempt to emulate the currently faulting instruction. this can use and modify
    the given context as necessary. this function may raise a fault,
    which the hypervisor should catch and deal with appropriately
    => priv_mode = privilege mode the instruction was executed in
@@ -111,7 +111,7 @@ pub fn emulate(priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationR
     EmulationResult::IllegalInstruction
 }
 
-/* incrememnt epc to the next 32-bit instruction */
+/* increment epc to the next 32-bit instruction */
 fn increment_epc()
 {
     let epc = read_csr!(mepc);

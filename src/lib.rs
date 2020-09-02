@@ -35,3 +35,4 @@ pub mod devices;
 pub mod errata;
 pub mod mmu;
 pub mod instructions;
+pub mod syscalls;
