@@ -41,6 +41,10 @@ const SBI_EXT_BASE_GET_MVENDORID:       usize = 4;
 const SBI_EXT_BASE_GET_MARCHID:         usize = 5;
 const SBI_EXT_BASE_GET_MIMPLD:          usize = 6;
 
+/* timer functionality */
+const SBI_EXT_TIMER: usize = 0x54494d45;
+const SBI_EXT_TIMER_SET:                usize = 0;
+
 static SBI_EXTS: &'static [usize] = &[
     SBI_EXT_BASE
 ];
@@ -49,7 +53,7 @@ static SBI_EXTS: &'static [usize] = &[
 #[derive(Debug)]
 pub enum Action
 {
-    Terminate,
+    Terminate,  /* terminate the running supervisor environment */
     Unknown(usize, usize)
 }
 
@@ -75,7 +79,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             {
                 if context.registers[irq::REG_A0] == *extension
                 {
-                    success(context, 0); /* matched an extension */
+                    success(context, *extension); /* matched an extension */
                     matched = true;
                     break;
                 }
@@ -83,7 +87,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
 
             if matched == false
             {
-                success(context, 1); /* did not match an extension */
+                success(context, 0); /* did not match an extension */
             }
         },
         (SBI_EXT_BASE, SBI_EXT_BASE_GET_MVENDORID) => success(context, read_csr!(mvendorid)),
