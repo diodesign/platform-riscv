@@ -11,6 +11,7 @@
 #![allow(dead_code)]
 
 use super::irq;
+use super::timer;
 
 /* this implementation follows version 0.2 of the RISC-V SBI */
 const SBI_SPEC_VERSION: usize = 2;
@@ -21,6 +22,9 @@ const SBI_IMPL_ID: usize = 4;
 
 /* implementation version 1 */
 const SBI_IMPL_VERSION: usize = 1; 
+
+/* all legacy extensions use function 0 */
+const SBI_LEGACY_FUNCTION: usize = 0;
 
 /* SBI error codes */
 const SBI_SUCCESS:                      usize = 0;
@@ -41,12 +45,14 @@ const SBI_EXT_BASE_GET_MVENDORID:       usize = 4;
 const SBI_EXT_BASE_GET_MARCHID:         usize = 5;
 const SBI_EXT_BASE_GET_MIMPLD:          usize = 6;
 
-/* timer functionality */
+/* timer extension */
 const SBI_EXT_TIMER: usize = 0x54494d45;
 const SBI_EXT_TIMER_SET:                usize = 0;
+/* the timer extension is mirrored in legacy SBI extension 0 */
+const SBI_LEGACY_TIMER_SET: usize = 0;
 
 static SBI_EXTS: &'static [usize] = &[
-    SBI_EXT_BASE
+    SBI_EXT_BASE, SBI_EXT_TIMER
 ];
 
 /* possible actions the hypervisor could take from a syscall */
@@ -54,6 +60,7 @@ static SBI_EXTS: &'static [usize] = &[
 pub enum Action
 {
     Terminate,  /* terminate the running supervisor environment */
+    TimerIRQAt(timer::TimerValue), /* raise a timer interrupt at or after the given time */
     Unknown(usize, usize)
 }
 
@@ -67,9 +74,22 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
     match (extension, function)
     {
         /* base SBI calls */
-        (SBI_EXT_BASE, SBI_EXT_BASE_GET_SPEC_VERSION) => success(context, SBI_SPEC_VERSION),
-        (SBI_EXT_BASE, SBI_EXT_BASE_GET_IMPL_ID) => success(context, SBI_IMPL_ID),
-        (SBI_EXT_BASE, SBI_EXT_BASE_GET_IMPL_VERSION) => success(context, SBI_IMPL_VERSION),
+        (SBI_EXT_BASE, SBI_EXT_BASE_GET_SPEC_VERSION) =>
+        {
+            success(context, SBI_SPEC_VERSION);
+            None
+        },
+        (SBI_EXT_BASE, SBI_EXT_BASE_GET_IMPL_ID) =>
+        {
+            success(context, SBI_IMPL_ID);
+            None
+        },
+
+        (SBI_EXT_BASE, SBI_EXT_BASE_GET_IMPL_VERSION) =>
+        {
+            success(context, SBI_IMPL_VERSION);
+            None
+        },
         (SBI_EXT_BASE, SBI_EXT_BASE_PROBE_EXTENSION) =>
         {
             let mut matched = false;
@@ -89,21 +109,61 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             {
                 success(context, 0); /* did not match an extension */
             }
+
+            None
         },
-        (SBI_EXT_BASE, SBI_EXT_BASE_GET_MVENDORID) => success(context, read_csr!(mvendorid)),
-        (SBI_EXT_BASE, SBI_EXT_BASE_GET_MARCHID)   => success(context, read_csr!(marchid)),
-        (SBI_EXT_BASE, SBI_EXT_BASE_GET_MIMPLD)    => success(context, read_csr!(mimpid)),
+        (SBI_EXT_BASE, SBI_EXT_BASE_GET_MVENDORID) =>
+        {
+            success(context, read_csr!(mvendorid));
+            None
+        },
+        (SBI_EXT_BASE, SBI_EXT_BASE_GET_MARCHID) =>
+        {
+            success(context, read_csr!(marchid));
+            None
+        },
+        (SBI_EXT_BASE, SBI_EXT_BASE_GET_MIMPLD) =>
+        {
+            success(context, read_csr!(mimpid));
+            None
+        }
+
+        /* timer SBI call */
+        (SBI_LEGACY_TIMER_SET, SBI_LEGACY_FUNCTION) | (SBI_EXT_TIMER, SBI_EXT_TIMER_SET) =>
+        {
+            /* clear any pending timer interrupt for the supervisor */
+            super::timer::clear_supervisor_irq();
+
+            /* ensure the timer is enabled at our end */
+            super::timer::enable_supervisor_irq();
+
+            let trigger_at: u64 = if cfg!(target_arch = "riscv32")
+            {
+                context.registers[irq::REG_A0] as u64 |
+                ((context.registers[irq::REG_A1] as u64) << 32)
+            }
+            else if cfg!(target_arch = "riscv64")
+            {
+                context.registers[irq::REG_A0] as u64
+            }
+            else
+            {
+                unreachable!(); /* we don't support non-rv32/rv64 */
+            };
+
+            /* let the supervisor know this worked, and let the hypervisor know
+            it needs to trigger a timer interrupt at some point */
+            success(context, 0);
+            Some(Action::TimerIRQAt(timer::TimerValue::Exact(trigger_at)))
+        }
 
         /* catch unhandled calls */
         (e, f) => 
         {
             set_error_code(context, SBI_ERR_NOT_SUPPORTED);
-            return Some(Action::Unknown(e, f))
+            Some(Action::Unknown(e, f))
         }
     }
-
-    /* fall through to no action to be taken by hypervisor */
-    None
 }
 
 /* set the error code of the syscall */

@@ -11,7 +11,6 @@
 .align 4
 
 .global irq_early_init
-.global irq_machine_handler
 
 # hypervisor constants, such as stack and lock locations
 .include "src/platform-riscv/asm/consts.s"
@@ -22,7 +21,7 @@
 # <= corrupts t0
 irq_early_init:
   # point core at default machine-level exception/interrupt handler
-  la    t0, irq_machine_handler
+  la    t0, machine_irq_handler
   csrrw x0, mtvec, t0
 
   # delegate most exceptions to the supervisor guest kernel
@@ -38,8 +37,15 @@ irq_early_init:
   li    t0, 0xb1f3
   csrrw x0, medeleg, t0
 
-  # don't delegate any interrupts
-  csrrw x0, mideleg, x0
+  # 0x333 = delegate the following to their modes:
+  # bit 0: User software interrupt
+  # bit 1: Supervisor software interrupt
+  # bit 4: User timer interrupt
+  # bit 5: Supervisor timer interrupt
+  # bit 8: User external interrupt
+  # bit 9: Supervisor external interrupt
+  li    t0, 0x333
+  csrrw x0, mideleg, t0
 
   # enable all interrupts: set bit 3 in mstatus to enable machine irqs (MIE)
   # to receive hardware interrupts and exceptions
@@ -70,7 +76,7 @@ irq_early_init:
 # interrupts are automatically disabled on entry.
 # right now, IRQs are non-reentrant. if an IRQ handler is interrupted, the previous one will
 # be discarded. do not enable hardware interrupts. any exceptions will be unfortunate.
-irq_machine_handler:
+machine_irq_handler:
   # get exception handler stack from mscratch by swapping it for interrupted code's sp
   # the handler stack descends from mscratch, the per-CPU variables ascend from it
   csrrw  sp, mscratch, sp
@@ -98,6 +104,12 @@ irq_machine_handler:
   # this means hypervisor functions relying on mscratch will break, so restore it.
   addi  t0, sp, IRQ_REGISTER_FRAME_SIZE
   csrrw x0, mscratch, t0
+
+  # mstatus.MPRV and mstatus.MXR bits are set by platform_read_u32_as_prev_mode during an attempt
+  # to read data as another privilege level. ensure those bits are now clear so that
+  # we don't continue to access memory as that other level when we exit this IRQ routine
+  li    t0, (1 << 17) | (1 << 19)
+  csrrc x0, mstatus, t0
 
   # for syscalls, riscv sets epc to the address of the syscall instruction.
   # in which case, we need to advance epc 4 bytes to the next instruction.

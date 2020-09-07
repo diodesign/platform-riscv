@@ -155,22 +155,53 @@ impl Devices
     /* return the timer's current value, or None if no timer
     this is a clock-on-the-wall timer in that its value always
     increases and never resets (though may rollover to 0) */
-    pub fn scheduler_timer_now(&self) -> Option<u64>
+    pub fn scheduler_get_timer_now(&self) -> Option<timer::TimerValue>
     {
         if let Some(s) = self.scheduler_timer
         {
-            return Some(s.now());
+            return Some(s.get_now());
         }
-
         None
     }
 
-    /* interrupt this CPU core in usecs microseconds using periodic timer */
-    pub fn scheduler_timer_next(&self, usecs: u64)
+    /* interrupt this CPU core with a tiemr IRQ after duration number
+    of ticks or sub-seconds have passed */
+    pub fn scheduler_timer_next_in(&self, duration: timer::TimerValue)
     {
         if let Some(s) = self.scheduler_timer
         {
-            s.next(usecs);
+            s.next_in(duration);
+        }
+    }
+
+    /* get the target value of the next timer IRQ */
+    pub fn scheduler_get_timer_next_at(&self) -> Option<timer::TimerValue>
+    {
+        if let Some(s) = self.scheduler_timer
+        {
+            return Some(s.get_next_at());
+        }
+        None
+    }
+
+    /* get the timer's frequency in Hz */
+    pub fn scheduler_get_timer_frequency(&self) -> Option<u64>
+    {
+        if let Some(s) = self.scheduler_timer
+        {
+            return Some(s.get_frequency());
+        }
+        None
+    }
+    
+
+    /* interrupt this CPU core when its timer values passes
+    the target number of ticks or sub-seconds */
+    pub fn scheduler_timer_at(&self, target: timer::TimerValue)
+    {
+        if let Some(s) = self.scheduler_timer
+        {
+            s.next_at(target);
         }
     }
 

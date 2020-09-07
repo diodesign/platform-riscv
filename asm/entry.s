@@ -73,11 +73,12 @@ _start:
   call      irq_early_init
 
   # initialize basic settings
-  # trap WFI in supervisors so we can auto-yield to other capsules
+  # trap WFI used by supervisors so we can auto-yield to other capsules
   # works only if supported by the hardware platform
-  li        t1, 1
-  slli      t2, t1, 21        # set bit 21 = TW (timewout wait)
-  csrrs     x0, mstatus, t2
+  li        t1, 1 << 21 # bit 21 = TW (timewout wait)
+  csrrs     x0, mstatus, t1
+  li        t1, 1 << 29 # for some reason Qemu has TW in bit 29
+  csrrs     x0, mstatus, t1
 
   # call hwentry with:
   # a0 = runtime-assigned CPU ID number

@@ -15,14 +15,15 @@ pub enum IRQType
     Interrupt, /* hardware-generated interrupt */
 }
 
-/* guide the hypervisor on whether to kill the running environment
-as a result of this interrupt or exception. the hypervisor can
-overrule it as required */
+/* inform the hypervisor whether execution can continue
+in the current environment if this interrupt or exception
+is not handled. if it can be handled, the hypervisor can
+decide what to do next -- continue execution or end it */
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum IRQSeverity
 {
-    Fatal, /* this IRQ should terminate the running environment */
-    NonFatal /* this IRQ should not terminate the running environment */
+    Fatal, /* terminate the running environment if unhandled */
+    NonFatal /* environment can continue if unhandled */
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -31,15 +32,15 @@ pub enum IRQCause
     /* software interrupt generated from user, supervisor or hypervisor mode */
     UserSWI,
     SupervisorSWI,
-    HypervisorSWI,
+    MachineSWI,
     /* hardware timer generated for user, supervisor or hypervisor mode */
     UserTimer,
     SupervisorTimer,
-    HypervisorTimer,
+    MachineTimer,
     /* external hw interrupt generated for user, supervisor or hypervisor mode */
     UserInterrupt,
     SupervisorInterrupt,
-    HypervisorInterrupt,
+    MachineInterrupt,
 
     /* common CPU faults */
     InstructionAlignment,
@@ -57,7 +58,7 @@ pub enum IRQCause
     /* other ways to call down from user to supervisor, etc */
     UserEnvironmentCall,
     SupervisorEnvironmentCall,
-    HypervisorEnvironmentCall,
+    MachineEnvironmentCall,
 
     Unknown, /* unknown, undefined, or reserved type */
 }
@@ -153,21 +154,21 @@ pub fn dispatch(context: IRQContext) -> Option<IRQ>
         (IRQType::Exception, 7) => (IRQSeverity::Fatal, IRQCause::StoreAccess),
         (IRQType::Exception, 8) => (IRQSeverity::NonFatal, IRQCause::UserEnvironmentCall),
         (IRQType::Exception, 9) => (IRQSeverity::NonFatal, IRQCause::SupervisorEnvironmentCall),
-        (IRQType::Exception, 11) => (IRQSeverity::NonFatal, IRQCause::HypervisorEnvironmentCall),
-        (IRQType::Exception, 12) => (IRQSeverity::NonFatal, IRQCause::InstructionPageFault),
-        (IRQType::Exception, 13) => (IRQSeverity::NonFatal, IRQCause::LoadPageFault),
-        (IRQType::Exception, 15) => (IRQSeverity::NonFatal, IRQCause::StorePageFault),
+        (IRQType::Exception, 11) => (IRQSeverity::NonFatal, IRQCause::MachineEnvironmentCall),
+        (IRQType::Exception, 12) => (IRQSeverity::Fatal, IRQCause::InstructionPageFault),
+        (IRQType::Exception, 13) => (IRQSeverity::Fatal, IRQCause::LoadPageFault),
+        (IRQType::Exception, 15) => (IRQSeverity::Fatal, IRQCause::StorePageFault),
 
         /* interrupts - none are fatal */
         (IRQType::Interrupt, 0) => (IRQSeverity::NonFatal, IRQCause::UserSWI),
         (IRQType::Interrupt, 1) => (IRQSeverity::NonFatal, IRQCause::SupervisorSWI),
-        (IRQType::Interrupt, 3) => (IRQSeverity::NonFatal, IRQCause::HypervisorSWI),
+        (IRQType::Interrupt, 3) => (IRQSeverity::NonFatal, IRQCause::MachineSWI),
         (IRQType::Interrupt, 4) => (IRQSeverity::NonFatal, IRQCause::UserTimer),
         (IRQType::Interrupt, 5) => (IRQSeverity::NonFatal, IRQCause::SupervisorTimer),
-        (IRQType::Interrupt, 7) => (IRQSeverity::NonFatal, IRQCause::HypervisorTimer),
+        (IRQType::Interrupt, 7) => (IRQSeverity::NonFatal, IRQCause::MachineTimer),
         (IRQType::Interrupt, 8) => (IRQSeverity::NonFatal, IRQCause::UserInterrupt),
         (IRQType::Interrupt, 9) => (IRQSeverity::NonFatal, IRQCause::SupervisorInterrupt),
-        (IRQType::Interrupt, 11) => (IRQSeverity::NonFatal, IRQCause::HypervisorInterrupt),
+        (IRQType::Interrupt, 11) => (IRQSeverity::NonFatal, IRQCause::MachineInterrupt),
         (_, _) => (IRQSeverity::NonFatal, IRQCause::Unknown),
     };
 

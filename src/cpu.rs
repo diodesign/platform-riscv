@@ -26,7 +26,7 @@ const CPUFEATURES_USER_MODE: usize       = 1 << 20; /* user mode is implemented 
 #[derive(Copy, Clone, Debug)]
 pub enum PrivilegeMode
 {
-    Hypervisor, /* machine-mode hypervisor */
+    Machine,    /* machine-mode hypervisor */
     Supervisor, /* supervisor */
     User        /* usermode */
 }
@@ -135,7 +135,7 @@ pub fn features_priv_check(required: PrivilegeMode) -> bool
     /* all RISC-V cores provide machine (hypervisor) mode. Diosix requires supervisor mode for user mode */
     match (required, cpu & CPUFEATURES_SUPERVISOR_MODE != 0, cpu & CPUFEATURES_USER_MODE != 0)
     {
-        (PrivilegeMode::Hypervisor,    _,    _) => true,
+        (PrivilegeMode::Machine,     _,      _) => true,
         (PrivilegeMode::Supervisor, true,    _) => true,
         (      PrivilegeMode::User, true, true) => true,
         _ => false
@@ -150,7 +150,7 @@ pub fn previous_privilege() -> PrivilegeMode
     {
         0 => PrivilegeMode::User,
         1 => PrivilegeMode::Supervisor,
-        _ => PrivilegeMode::Hypervisor
+        _ => PrivilegeMode::Machine
     }
 }
 

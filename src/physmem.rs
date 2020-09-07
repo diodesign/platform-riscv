@@ -59,7 +59,6 @@ const PHYS_PMP_READ: usize  = 1 << 0;
 const PHYS_PMP_WRITE: usize = 1 << 1;
 const PHYS_PMP_EXEC: usize  = 1 << 2;
 const PHYS_PMP_TOR: usize   = 1 << 3;
-const PHYS_PMP_ACCESS_MASK: usize = 0b11 << 3;
 
 /* each CPU has a fix memory overhead, allocated during boot, for its fixed heap,
 exception stack, private variables, etc */
@@ -408,89 +407,4 @@ fn write_pmp_addr(register: usize, value: usize)
         15 => write_csr!(pmpaddr15, value),
         _ => ()
     };
-}
-
-/* read value to the given PMP address register 0-15 (pmpaddr0-15). warning: silently fails */
-fn read_pmp_addr(register: usize) -> usize
-{
-    match register
-    {
-        0 => read_csr!(pmpaddr0),
-        1 => read_csr!(pmpaddr1),
-        2 => read_csr!(pmpaddr2),
-        3 => read_csr!(pmpaddr3),
-        4 => read_csr!(pmpaddr4),
-        5 => read_csr!(pmpaddr5),
-        6 => read_csr!(pmpaddr6),
-        7 => read_csr!(pmpaddr7),
-        8 => read_csr!(pmpaddr8),
-        9 => read_csr!(pmpaddr9),
-        10 => read_csr!(pmpaddr10),
-        11 => read_csr!(pmpaddr11),
-        12 => read_csr!(pmpaddr12),
-        13 => read_csr!(pmpaddr13),
-        14 => read_csr!(pmpaddr14),
-        15 => read_csr!(pmpaddr15),
-        _ => 0
-    }
-}
-
-/* check the given address is within a valid PMP range as a read operation.
-returns addr if valid, or None if not */
-pub fn validate_pmp_phys_addr(addr: u64) -> Option<u64>
-{
-    /* look up pairs of pmpcfg bytes that define PMP regions */
-    for pmpcfg_index in 0..8
-    {
-        let lo_index = pmpcfg_index * 2;
-        let hi_index = lo_index + 1;
-
-        let byte_lo = get_pmp_cfg_byte(lo_index) as usize;
-        let byte_hi = get_pmp_cfg_byte(hi_index) as usize;
-
-        if byte_hi & PHYS_PMP_READ == PHYS_PMP_READ &&
-            byte_hi & PHYS_PMP_ACCESS_MASK == PHYS_PMP_TOR &&
-            byte_lo == 0
-        {
-            /* this is a TOR PMP region that is readable. now check the
-            address is within range. shift up 2 because the region range
-            addresses are stored without their lowest 2 bits */
-            let addr_lo = (read_pmp_addr(lo_index) << 2) as u64;
-            let addr_hi = (read_pmp_addr(hi_index) << 2) as u64;
-
-            if addr >= addr_lo && addr < addr_hi
-            {
-                /* in range and readable */
-                return Some(addr);
-            }
-        }
-    }
-
-    None
-}
-
-#[cfg(target_arch = "riscv32")]
-/* return the configuration byte pmp<index>cfg where index is 0 to 15.
-pmp0cfg...pmp3cfg are in pmpcfg0, pmp4cfg...pmp7cfg are in pmpcfg1, etc */
-fn get_pmp_cfg_byte(index: usize) -> u8
-{
-    let register = (index >> 2) & 0b11;
-    let byte_index = (index & 0b11) * 8;
-
-    let word = read_pmpcfg(register);
-    let byte = (word >> byte_index) & 0xff;
-    return byte as u8;
-}
-
-#[cfg(target_arch = "riscv64")]
-/* return the configuration byte pmp<index>cfg where index is 0 to 15.
-pmp0cfg...pmp7cfg are in pmpcfg0, pmp8cfg...pmp15cfg are in pmpcfg0 */
-fn get_pmp_cfg_byte(index: usize) -> u8
-{
-    let register = (index >> 3) & 0b1;
-    let byte_index = (index & 0b111) * 8;
-
-    let word = read_pmpcfg(register * 2);
-    let byte = (word >> byte_index) & 0xff;
-    return byte as u8;
 }

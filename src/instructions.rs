@@ -9,9 +9,12 @@
 
 use super::irq::IRQContext;
 use super::cpu::PrivilegeMode;
-use super::physmem;
 use super::timer;
-use super::mmu;
+
+extern "C"
+{
+    fn platform_read_u32_as_prev_mode(address: usize) -> u32;
+}
 
 #[derive(PartialEq)]
 pub enum EmulationResult
@@ -19,14 +22,16 @@ pub enum EmulationResult
     Success, /* we were able to emulate the faulting instruction */
     CantEmulate, /* don't have the means to emulate this instruction */
     CantAccess, /* can't locate or access the illegal instruction */
-    IllegalInstruction /* this instruction is truly illegal, can't be run */
+    IllegalInstruction, /* this instruction is truly illegal, can't be run */
+    Yield /* this supervisor is yielding to other guests */
 }
 
 /* instructions we can handle here */
-const RDTIME_INST: u32  = 0xc01 << 20 | 2 << 12 | 0x1c << 2 | 3;
-const RDTIME_MASK: u32  = !(0x1f << 7);
+const RDTIME_INST:  u32 = 0xc01 << 20 | 2 << 12 | 0x1c << 2 | 3;
+const RDTIME_MASK:  u32 = !(0x1f << 7);
 const RDTIMEH_INST: u32 = 0xc81 << 20 | 2 << 12 | 0x1c << 2 | 3;
 const RDTIMEH_MASK: u32 = !(0x1f << 7);
+const WFI_INST:     u32 = 0x10500073;
 
 /* attempt to emulate the currently faulting instruction. this can use and modify
    the given context as necessary. this function may raise a fault,
@@ -35,52 +40,27 @@ const RDTIMEH_MASK: u32 = !(0x1f << 7);
       context = state of the CPU core trying to run the instruction,
                 which may be modified as necessary.
    <= returns confirmation of emulation, if possible, or not */
-pub fn emulate(priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationResult
+pub fn emulate(_priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationResult
 {
     /* get the address of the faulting instruction */
-    let addr = match priv_mode
-    {
-        /* if it's in the hypervisor, epc will be the physical address we need */
-        PrivilegeMode::Hypervisor => read_csr!(mepc) as u64,
+    let addr = read_csr!(mepc) as usize;
 
-        /* if it's in a supervisor, we need to walk the page tables.
-        we can't be certain mtval contains the faulting instruction.
-        it will on same systems, and not on others */
-        PrivilegeMode::Supervisor =>
-        {
-            /* either use the translated supervisor -> hypervisor physical address
-            or bail out */
-            match mmu::supervisor_addr_to_phys(read_csr!(mepc) as u64)
-            {
-                Some(phys) => phys,
-                None => return EmulationResult::CantAccess
-            }
-        },
-
-        _ => return EmulationResult::CantAccess
-    };
-
-    /* check we're reading from inside the supervisor environment */
-    if physmem::validate_pmp_phys_addr(addr).is_none() == true
-    {
-        return EmulationResult::CantAccess;
-    }
-
-    let instruction = unsafe { *(addr as *const u32) as u32 };
+    /* ensure any faults are blamed on the mode that tried to execute the instruction */
+    let instruction = unsafe { platform_read_u32_as_prev_mode(addr) };
 
     /* try to enulate the rdtime instruction, which reads the 64-bit real-time clock.
     on rv32, the low 32-bits are returned. on rv64, all bits are returned */
     if (instruction & RDTIME_MASK) == RDTIME_INST
     {
-        let time_now = match timer::get_pinned_timer_now_exact()
+        let time_now = match (timer::get_pinned_timer_now(), timer::get_pinned_timer_freq())
         {
-            Some(t) => t as usize,
-            None => return EmulationResult::CantEmulate
+            (Some(t), Some(f)) => t.to_exact(f),
+            (_, _) => return EmulationResult::CantEmulate
         };
 
         /* update destination register with current (low) word of the timer */
         let rd = ((instruction & !RDTIME_MASK) >> 7) & RDTIME_MASK;
-        context.registers[rd as usize] = time_now;
+        context.registers[rd as usize] = time_now as usize;
 
         increment_epc(); /* go to next instuction */
         return EmulationResult::Success;
@@ -92,10 +72,10 @@ pub fn emulate(priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationR
     {
         if (instruction & RDTIMEH_MASK) == RDTIMEH_INST
         {
-            let time_now = match timer::get_pinned_timer_now_exact()
+            let time_now = match (timer::get_pinned_timer_now(), timer::get_pinned_timer_freq())
             {
-                Some(t) => t as u64,
-                None => return EmulationResult::CantEmulate
+                (Some(t), Some(f)) => t.to_exact(f),
+                (_, _) => return EmulationResult::CantEmulate
             };
 
             /* update destination register with current high word of the timer */
@@ -105,6 +85,12 @@ pub fn emulate(priv_mode: PrivilegeMode, context: &mut IRQContext) -> EmulationR
             increment_epc(); /* go to next instuction */
             return EmulationResult::Success;
         }
+    }
+
+    /* catch WFI as a yield to other supervisor kernels */
+    if instruction == WFI_INST
+    {
+        return EmulationResult::Yield;
     }
 
     /* fall through to a confirmed illegal instruction */

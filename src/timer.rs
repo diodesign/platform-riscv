@@ -10,9 +10,13 @@ use super::physmem;
 
 extern "C"
 {
-    fn platform_timer_irq_enable();
+    fn platform_timer_machine_enable();
     fn platform_timer_target(target: u64, clint_base: physmem::PhysMemBase);
+    fn platform_timer_get_target(clint_base: physmem::PhysMemBase) -> u64;
     fn platform_timer_now(clint_base: physmem::PhysMemBase) -> u64;
+    fn platform_timer_supervisor_enable();
+    fn platform_timer_supervisor_trigger();
+    fn platform_timer_supervisor_clear();
 }
 
 lazy_static!
@@ -21,15 +25,95 @@ lazy_static!
     static ref PINNED_TIMER: Mutex<Option<Timer>> = Mutex::new(None);
 }
 
-/* divide timer frequency down into ticks per microsecond (1 millionth) */
-const MILLION: u64 = 1 * 1000 * 1000;
+/* divide timer frequency down into ticks per millisecond (1 thousandth of a second) */
+const THOUSAND: u64 = 1 * 1000;
+/* divide timer frequency down into ticks per microsecond (1 millionth of a second) */
+const MILLION: u64 = 1 * THOUSAND * THOUSAND;
+/* divide timer frequency down into ticks per nanosecond (1 billionth of a second) */
+const BILLION: u64 = 1 * THOUSAND * MILLION;
+
+/* a timer value is either in microseconds or an exact timer value */
+#[derive(Debug, Clone, Copy)]
+pub enum TimerValue
+{
+    Nanoseconds(u64),
+    Microseconds(u64),
+    Milliseconds(u64),
+    Seconds(u64),
+    Exact(u64)
+}
+
+impl TimerValue
+{
+    /* convert whatever the per-second value is to an
+    exact timer value given the timer's freq in Hz */
+    pub fn to_exact(self, freq: u64) -> u64
+    {
+        match self
+        {
+            TimerValue::Nanoseconds(t)  => (freq / BILLION) * t,
+            TimerValue::Microseconds(t) => (freq / MILLION) * t,
+            TimerValue::Milliseconds(t) => (freq / THOUSAND) * t,
+            TimerValue::Seconds(t)      => freq * t,
+            TimerValue::Exact(t)        => t
+        }
+    }
+
+    pub fn to_nanoseconds(self, freq: u64) -> TimerValue
+    {
+        TimerValue::Nanoseconds(match self
+        {
+            TimerValue::Nanoseconds(t)  => t,
+            TimerValue::Microseconds(t) => t * THOUSAND,
+            TimerValue::Milliseconds(t) => t * MILLION,
+            TimerValue::Seconds(t)      => t * BILLION,
+            TimerValue::Exact(t)        => (t / freq) * BILLION
+        })
+    }
+
+    pub fn to_microseconds(self, freq: u64) -> TimerValue
+    {
+        TimerValue::Microseconds(match self
+        {
+            TimerValue::Nanoseconds(t)  => t / THOUSAND,
+            TimerValue::Microseconds(t) => t,
+            TimerValue::Milliseconds(t) => t * THOUSAND,
+            TimerValue::Seconds(t)      => t * MILLION,
+            TimerValue::Exact(t)        => (t / freq) * MILLION
+        })
+    }
+
+    pub fn to_milliseconds(self, freq: u64) -> TimerValue
+    {
+        TimerValue::Milliseconds(match self
+        {
+            TimerValue::Nanoseconds(t)  => t / MILLION,
+            TimerValue::Microseconds(t) => t / THOUSAND,
+            TimerValue::Milliseconds(t) => t,
+            TimerValue::Seconds(t)      => t * THOUSAND,
+            TimerValue::Exact(t)        => (t / freq) * THOUSAND
+        })
+    }
+
+    pub fn to_seconds(self, freq: u64) -> TimerValue
+    {
+        TimerValue::Seconds(match self
+        {
+            TimerValue::Nanoseconds(t)  => t / BILLION,
+            TimerValue::Microseconds(t) => t / MILLION,
+            TimerValue::Milliseconds(t) => t / THOUSAND,
+            TimerValue::Seconds(t)      => t,
+            TimerValue::Exact(t)        => t / freq
+        })
+    }
+}
 
 /* describe a per-CPU core timer */
 #[derive(Clone, Copy, Debug)]
 pub struct Timer
 {
     clint_base: physmem::PhysMemBase, /* base MMIO address of system's CLINT IO controller */
-    frequency: u64,    /* rate at which timer is incremented */
+    frequency: u64 /* rate at which timer is incremented */
 }
 
 impl Timer
@@ -65,42 +149,64 @@ impl Timer
     pub fn start(&self)
     {
         /* zero means trigger timer right away */
-        self.next(0);
+        self.next_in(TimerValue::Exact(0));
         /* and throw the switch... */
-        unsafe { platform_timer_irq_enable(); }
+        unsafe { platform_timer_machine_enable(); }
     }
 
-    /* return the current timer value right now in microseconds.
-    this is a clock-on-the-wall value in that it doesn't reset,
-    always incremements at a fixed rate, though will rollover to 0 */
-    pub fn now(&self) -> u64
+    /* return the current timer value. this is a clock-on-the-wall
+    value in that it doesn't reset, always incremements at a fixed rate,
+    though will rollover to 0 */
+    pub fn get_now(&self) -> TimerValue
     {
-        let value = unsafe { platform_timer_now(self.clint_base) };
-        (value / self.frequency) * MILLION
+        TimerValue::Exact(unsafe { platform_timer_now(self.clint_base) })
     }
 
-    /* return the exact contents of the current timer right now */
-    pub fn now_exact(&self) -> u64
+    /* trigger an IRQ after this number of ticks or sub-seconds
+       => duration = number of ticks or sub-seconds from now to interrupt */
+    pub fn next_in(&self, duration: TimerValue)
     {
-        unsafe { platform_timer_now(self.clint_base) }
-    }
-
-    /* define duration until this CPU core's timer next triggers an IRQ.
-       => usecs = number of microseconds (millionths of a second) from now to interrupt */
-    pub fn next(&self, usecs: u64)
-    {
-        let target = ((self.frequency / MILLION) * usecs) + unsafe { platform_timer_now(self.clint_base) };
+        let target = duration.to_exact(self.frequency) + unsafe { platform_timer_now(self.clint_base) };
         unsafe { platform_timer_target(target, self.clint_base); }
+    }
+
+    /* define the timer value after which an IRQ is triggered for this CPU core.
+    => target = fire the IRQ when the timer value passes this target value */
+    pub fn next_at(&self, target: TimerValue)
+    {
+        unsafe { platform_timer_target(target.to_exact(self.frequency), self.clint_base); }
+    }
+
+    /* get the target value that will cause the timer IRQ to fire next */
+    pub fn get_next_at(&self) -> TimerValue
+    {
+        TimerValue::Exact(unsafe { platform_timer_get_target(self.clint_base) })
     }
 }
 
 /* return the current value of the pinned timer, or None for no pinned timer */
-pub fn get_pinned_timer_now_exact() -> Option<u64>
+pub fn get_pinned_timer_now() -> Option<TimerValue>
 {
     let pinned = PINNED_TIMER.lock();
     match *pinned
     {
-        Some(timer) => Some(timer.now_exact()),
+        Some(timer) => Some(timer.get_now()),
         None => None
     }
 }
+
+/* return the frequency of the pinned timer, or None for no pinned timer */
+pub fn get_pinned_timer_freq() -> Option<u64>
+{
+    let pinned = PINNED_TIMER.lock();
+    match *pinned
+    {
+        Some(timer) => Some(timer.get_frequency()),
+        None => None
+    }
+}
+
+/* enable the supervisor's timer interrupt, trigger it, and clear a pending interrupt */
+pub fn enable_supervisor_irq()  { unsafe { platform_timer_supervisor_enable();  } }
+pub fn trigger_supervisor_irq() { unsafe { platform_timer_supervisor_trigger(); } }
+pub fn clear_supervisor_irq()   { unsafe { platform_timer_supervisor_clear();   } }
