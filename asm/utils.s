@@ -239,6 +239,6 @@ platform_read_u32_as_prev_mode:
 # pin the blame on the previous mode (in mstatus.mpp) by swapping in previous mstatus
 # this means the fault will appear from that mode
 trap_read_u32_fault:
-  csrrw x0, mstatus, t1           # restore the mstatus with the previous mpp
+  csrrw x0, mstatus, t1           # restore the mstatus with the previous mpp, and no MPRV + MXR set
   csrrw x0, mtvec, t2             # restore the original fault handler
   jalr  x0, t2                    # jump to fault handler to deal with error

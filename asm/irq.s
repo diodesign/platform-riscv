@@ -105,12 +105,6 @@ machine_irq_handler:
   addi  t0, sp, IRQ_REGISTER_FRAME_SIZE
   csrrw x0, mscratch, t0
 
-  # mstatus.MPRV and mstatus.MXR bits are set by platform_read_u32_as_prev_mode during an attempt
-  # to read data as another privilege level. ensure those bits are now clear so that
-  # we don't continue to access memory as that other level when we exit this IRQ routine
-  li    t0, (1 << 17) | (1 << 19)
-  csrrc x0, mstatus, t0
-
   # for syscalls, riscv sets epc to the address of the syscall instruction.
   # in which case, we need to advance epc 4 bytes to the next instruction.
   # (all instructions are 4 bytes long, for RV32 and RV64)

@@ -36,7 +36,7 @@ const SBI_ERR_INVALID_ADDRESS:          usize = (-5 as i32) as usize;
 const SBI_ERR_ALREADY_AVAILABLE:        usize = (-6 as i32) as usize;
 
 /* base functionality */
-const SBI_EXT_BASE: usize = 0x10;
+const SBI_EXT_BASE:                     usize = 0x10;
 const SBI_EXT_BASE_GET_SPEC_VERSION:    usize = 0;
 const SBI_EXT_BASE_GET_IMPL_ID:         usize = 1;
 const SBI_EXT_BASE_GET_IMPL_VERSION:    usize = 2;
@@ -46,13 +46,22 @@ const SBI_EXT_BASE_GET_MARCHID:         usize = 5;
 const SBI_EXT_BASE_GET_MIMPLD:          usize = 6;
 
 /* timer extension */
-const SBI_EXT_TIMER: usize = 0x54494d45;
+const SBI_EXT_TIMER:                    usize = 0x54494d45;
 const SBI_EXT_TIMER_SET:                usize = 0;
 /* the timer extension is mirrored in legacy SBI extension 0 */
 const SBI_LEGACY_TIMER_SET: usize = 0;
 
+/* rfence extension */
+const SBI_EXT_RFENCE:                   usize = 0x52464e43;
+const SBI_EXT_RFENCE_I:                 usize = 0;
+const SBI_EXT_RFENCE_SFENCE_VMA:        usize = 1;
+/* the rfence extension is mirrored in legacy SBI extensions 5 and 6 */
+const SBI_LEGACY_REMOTE_FENCE_I:        usize = 5;
+const SBI_LEGACY_SFENCE_VMA:            usize = 6;
+
 static SBI_EXTS: &'static [usize] = &[
-    SBI_EXT_BASE, SBI_EXT_TIMER
+    SBI_EXT_BASE, SBI_EXT_TIMER, SBI_LEGACY_TIMER_SET,
+    SBI_EXT_RFENCE, SBI_LEGACY_REMOTE_FENCE_I
 ];
 
 /* possible actions the hypervisor could take from a syscall */
@@ -127,6 +136,21 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             success(context, read_csr!(mimpid));
             None
         }
+
+        /* rfence SBI calls */
+        (SBI_LEGACY_REMOTE_FENCE_I, SBI_LEGACY_FUNCTION) | (SBI_EXT_RFENCE, SBI_EXT_RFENCE_I) =>
+        {
+            /* TODO: handle remote cores */
+            unsafe { llvm_asm!("fence.i") };
+            None
+        },
+
+        (SBI_LEGACY_SFENCE_VMA, SBI_LEGACY_FUNCTION) | (SBI_EXT_RFENCE, SBI_EXT_RFENCE_SFENCE_VMA) =>
+        {
+            /* TODO: handle remote cores, handle specific VMA ranges */
+            unsafe { llvm_asm!("sfence.vma x0, x0") };
+            None
+        },
 
         /* timer SBI call */
         (SBI_LEGACY_TIMER_SET, SBI_LEGACY_FUNCTION) | (SBI_EXT_TIMER, SBI_EXT_TIMER_SET) =>
