@@ -21,10 +21,7 @@ const SBI_SPEC_VERSION: usize = 2;
 const SBI_IMPL_ID: usize = 4;
 
 /* implementation version 1 */
-const SBI_IMPL_VERSION: usize = 1; 
-
-/* all legacy extensions use function 0 */
-const SBI_LEGACY_FUNCTION: usize = 0;
+const SBI_IMPL_VERSION: usize = 1;
 
 /* SBI error codes */
 const SBI_SUCCESS:                      usize = 0;
@@ -49,7 +46,7 @@ const SBI_EXT_BASE_GET_MIMPLD:          usize = 6;
 const SBI_EXT_TIMER:                    usize = 0x54494d45;
 const SBI_EXT_TIMER_SET:                usize = 0;
 /* the timer extension is mirrored in legacy SBI extension 0 */
-const SBI_LEGACY_TIMER_SET: usize = 0;
+const SBI_LEGACY_TIMER_SET:             usize = 0;
 
 /* rfence extension */
 const SBI_EXT_RFENCE:                   usize = 0x52464e43;
@@ -138,14 +135,14 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
         }
 
         /* rfence SBI calls */
-        (SBI_LEGACY_REMOTE_FENCE_I, SBI_LEGACY_FUNCTION) | (SBI_EXT_RFENCE, SBI_EXT_RFENCE_I) =>
+        (SBI_LEGACY_REMOTE_FENCE_I, _) | (SBI_EXT_RFENCE, SBI_EXT_RFENCE_I) =>
         {
             /* TODO: handle remote cores */
             unsafe { llvm_asm!("fence.i") };
             None
         },
 
-        (SBI_LEGACY_SFENCE_VMA, SBI_LEGACY_FUNCTION) | (SBI_EXT_RFENCE, SBI_EXT_RFENCE_SFENCE_VMA) =>
+        (SBI_LEGACY_SFENCE_VMA, _) | (SBI_EXT_RFENCE, SBI_EXT_RFENCE_SFENCE_VMA) =>
         {
             /* TODO: handle remote cores, handle specific VMA ranges */
             unsafe { llvm_asm!("sfence.vma x0, x0") };
@@ -153,7 +150,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
         },
 
         /* timer SBI call */
-        (SBI_LEGACY_TIMER_SET, SBI_LEGACY_FUNCTION) | (SBI_EXT_TIMER, SBI_EXT_TIMER_SET) =>
+        (SBI_LEGACY_TIMER_SET, _) | (SBI_EXT_TIMER, SBI_EXT_TIMER_SET) =>
         {
             /* clear any pending timer interrupt for the supervisor */
             super::timer::clear_supervisor_irq();
