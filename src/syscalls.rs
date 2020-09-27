@@ -32,6 +32,9 @@ const SBI_ERR_DENIED:                   usize = (-4 as i32) as usize;
 const SBI_ERR_INVALID_ADDRESS:          usize = (-5 as i32) as usize;
 const SBI_ERR_ALREADY_AVAILABLE:        usize = (-6 as i32) as usize;
 
+/* SBI legacy functionality */
+const SBI_EXT_CONSOLE_PUTCHAR:          usize = 0x1;
+
 /* base functionality */
 const SBI_EXT_BASE:                     usize = 0x10;
 const SBI_EXT_BASE_GET_SPEC_VERSION:    usize = 0;
@@ -57,8 +60,15 @@ const SBI_LEGACY_REMOTE_FENCE_I:        usize = 5;
 const SBI_LEGACY_SFENCE_VMA:            usize = 6;
 
 static SBI_EXTS: &'static [usize] = &[
-    SBI_EXT_BASE, SBI_EXT_TIMER, SBI_LEGACY_TIMER_SET,
-    SBI_EXT_RFENCE, SBI_LEGACY_REMOTE_FENCE_I
+    /* modern extension format */
+    SBI_EXT_BASE,
+    SBI_EXT_TIMER,
+    SBI_EXT_RFENCE,
+
+    /* legacy extensions */
+    SBI_EXT_CONSOLE_PUTCHAR,
+    SBI_LEGACY_REMOTE_FENCE_I,
+    SBI_LEGACY_TIMER_SET
 ];
 
 /* possible actions the hypervisor could take from a syscall */
@@ -67,6 +77,7 @@ pub enum Action
 {
     Terminate,  /* terminate the running supervisor environment */
     TimerIRQAt(timer::TimerValue), /* raise a timer interrupt at or after the given time */
+    OutputChar(char), /* the guest wants to write a character to the terminal */
     Unknown(usize, usize)
 }
 
@@ -79,6 +90,14 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
 
     match (extension, function)
     {
+        /* legacy extensions that have no modern mapping */
+        (SBI_EXT_CONSOLE_PUTCHAR, _) =>
+        {
+            let c = context.registers[irq::REG_A0] as u8 as char;
+            success(context, 0);
+            Some(Action::OutputChar(c))
+        }
+
         /* base SBI calls */
         (SBI_EXT_BASE, SBI_EXT_BASE_GET_SPEC_VERSION) =>
         {
