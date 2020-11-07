@@ -1,0 +1,27 @@
+# stop this sort of cruft ending up in the repo
+*~
+*.swp
+*.swo
+*.o
+*.a
+*.bin
+*.iso
+*.out
+*.elf
+.DS_Store
+
+# ignore compiler output directories
+target/
+
+# ignore guest OS binaries
+guests/binaries/
+
+# ignore rustfmt stuff
+**/*.rs.bk
+
+# ignore IDE stuff for now
+.vscode*
+.vscode/*
+
+# ignore Cargo metadata
+Cargo.lock
