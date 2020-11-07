@@ -16,8 +16,7 @@ use super::timer;
 /* this implementation follows version 0.2 of the RISC-V SBI */
 const SBI_SPEC_VERSION: usize = 2;
 
-/* this is implementation ID 5, pending acceptance of:
-   https://lists.riscv.org/g/tech-unixplatformspec/message/385 */
+/* this is implementation ID 5, as per: https://github.com/riscv/riscv-sbi-doc/pull/62 */
 const SBI_IMPL_ID: usize = 5;
 
 /* implementation version 1 */
