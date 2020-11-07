@@ -62,7 +62,9 @@ pub struct SupervisorState
    => cpu_nr = the CPU hart ID for this supervisor CPU core
       entry = address where execution will start for this supervisor
       dtb = physical address of the device tree blob describing
-            the supervisor's virtual hardware */
+            the supervisor's virtual hardware.
+            it's safe to assume the RAM immediately below this is usable as
+            the DTB is copied into the top-most bytes of available RAM */
 pub fn init_supervisor_state(cpu_nr: CPUcount, entry: Entry, dtb: PhysMemBase) -> SupervisorState
 {
     let mut state = SupervisorState

@@ -8,18 +8,6 @@
 use core::intrinsics::transmute;
 use super::cpu;
 
-/* we need this code from the assembly files */
-extern "C"
-{
-    /* hypervisor linker symbols */
-    static __hypervisor_start: u8;
-    static __hypervisor_end: u8;
-
-    /* boot capsule's supervisor linker symbols */
-    static _binary_supervisor_start: u8;
-    static _binary_supervisor_end: u8;
-}
-
 /* place a memory barrier that ensures all RAM and MMIO read and write operations
 complete in the eyes of other CPU cores before the barrier is encountered */
 #[inline(always)]

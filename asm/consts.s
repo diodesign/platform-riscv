@@ -14,7 +14,7 @@
 .error "Only 32-bit and 64-bit RISC-V supported (unexpected pointer width)"
 .endif
 
-# the hypervisor is laid out as follows in physical memory on bootup
+# the hypervisor is laid out as follows in physical memory on bootup, ascending:
 # (all addresses should be 4KB word aligned, and defined in the target ld script)
 #   __hypervisor_start = base of hypervisor
 #   .

@@ -80,7 +80,7 @@ _start:
   li        t1, 1 << 29 # for some reason Qemu has TW in bit 29
   csrrs     x0, mstatus, t1
 
-  # call hwentry with:
+  # call hventry with:
   # a0 = runtime-assigned CPU ID number
   # a1 = pointer to start of devicetree
   # a2 = big-endian length of the devicetree
