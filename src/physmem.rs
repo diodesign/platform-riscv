@@ -8,6 +8,13 @@
 use core::intrinsics::transmute;
 use super::cpu;
 
+extern "C"
+{
+    /* hypervisor linker symbols */
+    static __hypervisor_start: u8;
+    static __hypervisor_end: u8;
+}
+
 /* place a memory barrier that ensures all RAM and MMIO read and write operations
 complete in the eyes of other CPU cores before the barrier is encountered */
 #[inline(always)]
@@ -199,17 +206,8 @@ pub fn validate_ram(cpu_count: usize, phys_ram_block: RAMArea) -> RAMAreaIter
     }
 }
 
-/* return the (start address, end address) of the boot capsule's supervisor in physical memory */
-pub fn boot_supervisor() -> (PhysMemBase, PhysMemEnd)
-{
-    let start: PhysMemBase = unsafe { transmute(&_binary_supervisor_start) };
-    let end: PhysMemEnd = unsafe { transmute(&_binary_supervisor_end) };
-    return (start, end);
-}
-
 /* return the (start address, end address) of the whole hypervisor's code and data in physical memory,
-   this must include the boot capsule supervisor and fixed per-CPU core private memory areas.
-   note! the boot capsule supervisor is linked within the hypervisor's final executable. 
+   this must include the fixed per-CPU core private memory areas.
     => cpu_count = number of CPU cores
     <= base and end addresses of the hypervisor footprint */
 fn hypervisor_footprint(cpu_count: usize) -> (PhysMemBase, PhysMemEnd)

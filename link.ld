@@ -1,8 +1,11 @@
 /* diosix ELF layout for common RV32/RV64 hardware
  *
  * Only requirement is that physical RAM starts at 0x80000000, where the hypervisor is loaded and entered
+ * FIXME: whnat happens when the physical RAM is not at 0x80000000?
  *
- * (c) Chris Williams, 2019.
+ * Do a cargo clean after modifying this file.
+ *
+ * (c) Chris Williams, 2019-2020.
  * See LICENSE for usage and copying.
  */
 
