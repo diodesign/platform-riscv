@@ -17,6 +17,3 @@ features = [ "spin_no_std" ]
 # local dependencies
 [dependencies.devicetree]
 path = "../devicetree"
-
-[dependencies.qemuprint]
-path = "../qemuprint"

@@ -120,9 +120,9 @@ impl Devices
                 }
             },
 
-            parsed: parsed,
-            errata_known: errata_known,
-            errata_fixed: errata_fixed
+            parsed,
+            errata_known,
+            errata_fixed
         };
 
         Ok(d)

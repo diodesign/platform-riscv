@@ -26,18 +26,18 @@ pub struct SerialPort
 impl SerialPort
 {
     /* create a new serial port
-       => base_addr = serial controller's hardware base MMIO address
+       => base = serial controller's hardware base MMIO address
           size = serial controller's MMIO address space size in bytes
        <= serial port device object */
-    pub fn new(base_addr: usize, size: usize, compat: &String) -> SerialPort
+    pub fn new(base: usize, size: usize, compat: &String) -> SerialPort
     {
         /* enable tx by setting bit TXCTRL_ENABLE to 1 */
         // unsafe { write_volatile((base_addr + TXCTRL) as *mut u32, TXCTRL_ENABLE); }
 
         SerialPort
         {
-            base: base_addr,
-            size: size,
+            base,
+            size,
             compat: compat.clone()
         }
     }

@@ -127,8 +127,8 @@ impl Timer
     {
         Timer
         {
-            clint_base: clint_base,
-            frequency: frequency
+            clint_base,
+            frequency
         }
     }
 

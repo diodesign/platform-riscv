@@ -178,9 +178,9 @@ pub fn dispatch(context: IRQContext) -> Option<IRQ>
     (
         IRQ
         {
-            severity: severity,
+            severity,
             irq_type: cause_type,
-            cause: cause,
+            cause,
             privilege_mode: crate::cpu::previous_privilege(),
             pc: read_csr!(mepc),
             sp: context.registers[2], /* x2 = sp */
