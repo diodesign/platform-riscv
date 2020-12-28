@@ -131,7 +131,7 @@ impl Devices
     /* write msg string out to the debug serial port */
     pub fn write_debug_string(&self, msg: &str)
     {
-        if let Some(con) = self.debug_console.clone()
+        if let Some(con) = &self.debug_console
         {
             con.write(msg);
         }
@@ -259,7 +259,7 @@ impl Devices
         }
 
         /* create virtual serial port based on the host's hardware */
-        match self.debug_console.clone()
+        match &self.debug_console
         {
             Some(con) =>
             {
@@ -343,14 +343,22 @@ fn create_debug_console(dt: &DeviceTree, path: &String) -> Result<serial::Serial
 
     match cells.address
     {
-        1 => Ok(serial::SerialPort::new(
-                    reg.as_multi_u32()?[0] as usize,
-                    reg.as_multi_u32()?[1] as usize,
-                    &compat.as_text()?)),
-        2 => Ok(serial::SerialPort::new(
-                    reg.as_multi_u64()?[0] as usize,
-                    reg.as_multi_u64()?[1] as usize,
-                    &compat.as_text()?)),
+        1 => match serial::SerialPort::new(
+                    reg.as_multi_u32()?[0] as usize, /* base addr */
+                    reg.as_multi_u32()?[1] as usize, /* size */
+                    &compat.as_text()?)
+                    {
+                        Some(sp) => Ok(sp),
+                        None => Err(DeviceTreeError::DeviceFailure)
+                    },
+        2 => match serial::SerialPort::new(
+                    reg.as_multi_u64()?[0] as usize, /* base addr */
+                    reg.as_multi_u64()?[1] as usize, /* size */
+                    &compat.as_text()?)
+                    {
+                        Some(sp) => Ok(sp),
+                        None => Err(DeviceTreeError::DeviceFailure)
+                    },
         _ => Err(DeviceTreeError::WidthUnsupported)
     }
 }

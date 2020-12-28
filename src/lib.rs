@@ -2,7 +2,7 @@
  *
  * (c) Chris Williams, 2019-2020.
  *
- * See LICENSE for usage and copying.
+ * See README and LICENSE for usage and copying.
  */
 
 #![no_std]
@@ -19,6 +19,9 @@ extern crate devicetree;
 #[macro_use]
 extern crate lazy_static;
 extern crate spin;
+
+/* needed for 16550-compatible UART support */
+extern crate mmio_16550_uart;
 
 /* expose architecture common code to platform-specific code */
 #[macro_use]

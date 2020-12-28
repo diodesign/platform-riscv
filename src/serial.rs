@@ -1,45 +1,69 @@
-/* diosix RV32G/RV64G hardware serial controller
+/* diosix RV32G/RV64G hardware serial port abstraction
  *
+ * This creates a generic serial port that calls down
+ * to a hardware-specific implementation selected by the
+ * compatibility string
+ * 
  * (c) Chris Williams, 2019-2020.
  *
  * See LICENSE for usage and copying.
  */
 
 use alloc::string::String;
-use core::ptr::write_volatile;
+use mmio_16550_uart;
 
-/* serial port controller registers, relative to the base address */
-const TXDATA: usize = 0x0;     /* write a byte here to transmit it over the port */
-
-//const TXCTRL: usize = 0x8;     /* transmission control register */
-//const TXCTRL_ENABLE: u32 = 1 << 0; /* bit 0 of TXCTRL = 1 to enable transmission */
+/* supported serial port controllers */
+#[derive(Debug)]
+enum Controllers
+{
+    NS16550a(mmio_16550_uart::UART)
+}
 
 /* define a standard serial port input/output device */
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct SerialPort
 {
-    base: usize, /* base MMIO address of the serial port controller */
-    size: usize, /* MMIO address space size of the serial port controller */
-    compat: String /* string describing the hardware this is compatible with */
+    base: usize,
+    size: usize,
+    compat: String,
+    chip: Controllers
 }
 
 impl SerialPort
 {
-    /* create a new serial port
+    /* create a new serial port, if a driver exists for it
        => base = serial controller's hardware base MMIO address
           size = serial controller's MMIO address space size in bytes
-       <= serial port device object */
-    pub fn new(base: usize, size: usize, compat: &String) -> SerialPort
+          compat = comma-seperated string of devices this port is compatible with
+       <= serial port device object, or None for error */
+    pub fn new(base: usize, size: usize, compat: &String) -> Option<SerialPort>
     {
-        /* enable tx by setting bit TXCTRL_ENABLE to 1 */
-        // unsafe { write_volatile((base_addr + TXCTRL) as *mut u32, TXCTRL_ENABLE); }
-
-        SerialPort
+        let compat_str = compat.as_str();
+        if compat_str.contains("16550a") == true
         {
-            base,
-            size,
-            compat: compat.clone()
+            if let Ok(uart) = mmio_16550_uart::UART::new(base)
+            {
+                /* reject MMIO areas that are too small */
+                if uart.size() > size
+                {
+                    return None;
+                }
+
+                return Some(SerialPort
+                {
+                    base, size, compat: compat.clone(),
+                    chip: Controllers::NS16550a(uart)
+                });
+            }
+            else
+            {
+                /* faild to create serial controller */
+                return None;
+            }
         }
+
+        /* failed to find compatible controller */
+        return None;
     }
 
     /* return information about this serial port */
@@ -47,26 +71,22 @@ impl SerialPort
     pub fn get_mmio_size(&self) -> usize { self.size }
     pub fn get_compatibility(&self) -> &String { &self.compat }
 
-    /* write the string msg to the serial port */
-    pub fn write(&self, msg: &str)
+    /* write the string msg to the serial port
+       <= true if successful, false if not */
+    pub fn write(&self, msg: &str) -> bool
     {
         for byte in msg.bytes()
         {
-            self.write_byte(byte);
+            match &self.chip
+            {
+                Controllers::NS16550a(c) => match c.send_byte(byte)
+                {
+                    Ok(_) => (),
+                    Err(_) => return false
+                }
+            }
         }
-    }
 
-    /* write byte to_write out to the serial port */
-    #[inline(always)]
-    pub fn write_byte(&self, to_write: u8)
-    {
-        unsafe { write_volatile((self.base + TXDATA) as *mut u8, to_write); }
-    }
-
-    /* read a byte from the serial port, or None for no byte to read */
-    #[inline(always)]
-    pub fn read_byte(&self) -> Option<u8>
-    {
-        None
+        true
     }
 }

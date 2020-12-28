@@ -17,3 +17,6 @@ features = [ "spin_no_std" ]
 # local dependencies
 [dependencies.devicetree]
 path = "../devicetree"
+
+[dependencies.mmio_16550_uart]
+path = "src/mmio_16550_uart"
