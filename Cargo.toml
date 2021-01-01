@@ -8,7 +8,7 @@ publish = false
 
 # external dependencies
 [dependencies.spin]
-version = "0.5.2"
+version = "0.7.0"
 
 [dependencies.lazy_static]
 version = "1.4.0"
