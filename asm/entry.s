@@ -9,7 +9,7 @@
 
 # _start *must* be the first routine in this file
 .section .entry
-.align 4
+.align 8
 
 .global _start
 
@@ -34,23 +34,23 @@
 # this code is assumed to be loaded and running at 0x80000000
 # interrupts and exceptions are disabled.
 #
-# => a0 = CPU core ID, aka hart ID
+# => a0 = CPU core ID, aka hart ID, assigned by firmware
 #    a1 = pointer to device tree
 # <= never returns
 _start:
   # each core should grab a slab of memory starting from the end of the hypervisor.
   # in order to scale to many cores, not waste too much memory, and to cope with non-linear
-  # CPU ID / hart ID, each core will take memory using an atomic counter in the first word
-  # of available RAM. thus, memory is allocated on a first come, first served basis.
-  # this counter is temporarily and should be forgotten about once in hvmain()
-  la        t1, __hypervisor_end
+  # CPU ID / hart ID, each core will take memory using an atomic counter.
+  # thus, memory is allocated on a first come, first served basis.
+  la        t1, cpu_core_id_counter
   li        t2, 1
   amoadd.w  t3, t2, (t1)
   # t3 = counter just before we incremented it
-  # preserve t3 in a0
+  # preserve t3 in a0 -- that's now our runtime-assigned CPU core ID
   add       a0, t3, x0
   
   # use t3 this as a multiplier from the end of the hypervisor, using shifts to keep things easy
+  la        t1, __hypervisor_end
   slli      t3, t3, HV_CPU_SLAB_SHIFT
   add       t3, t3, t1
   # t3 = base of this CPU's private memory slab
@@ -80,6 +80,35 @@ _start:
   li        t1, 1 << 29 # for some reason Qemu has TW in bit 29
   csrrs     x0, mstatus, t1
 
+  # boot CPU core (ID 0) needs to zero the BSS */
+  la        t0, clear_bss_finished
+  beq       x0, a0, clear_bss
+
+  # other CPU cores need to wait for clear_bss_finished
+  # to change from zero to non-zero to indicate the BSS is clear
+clear_bss_wait_loop:
+  amoswap.w t1, x0, (t0)
+  beq       x0, t1, clear_bss_wait_loop
+  j         clear_bss_loop_end
+
+clear_bss:
+  la        t1, __bss_start
+  la        t2, __bss_end
+  bgeu      t1, t2, clear_bss_loop_end # avoid empty or malformed bss 
+clear_bss_loop:
+.if ptrwidth == 32
+  sw        x0, (t1)
+  addi      t1, t1, 4
+.else
+  sd        x0, (t1)
+  addi      t1, t1, 8
+.endif
+  bltu      t1, t2, clear_bss_loop
+
+clear_bss_loop_end:
+  li        t1, 1        # set clear_bss_finished to 1 now we're done
+  amoswap.w x0, t1, (t0) # t0 = clear_bss_finished
+
   # call hventry with:
   # a0 = runtime-assigned CPU ID number
   # a1 = pointer to start of devicetree
@@ -88,10 +117,15 @@ _start:
   la        t0, hventry
   jalr      ra, t0, 0
 
-# let's go back to the rock, go back to the rock, and see you at 440.
-
 # fall through to loop rather than crash into random instructions/data
-# wait for interrupts to come in and service them
 infinite_loop:
   wfi
   j         infinite_loop
+
+# variables
+.align 4
+cpu_core_id_counter:
+.word 0
+
+clear_bss_finished:
+.word 0
