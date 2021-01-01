@@ -236,7 +236,7 @@ impl Devices
                 dt.edit_property(&cpu_root_path, &format!("timebase-frequency"),
                     DeviceTreeProperty::UnsignedInt32(freq));
             },
-            Err(_) => () /* todo: should we guess the timebase frequency instead? */
+            Err(_) => () /* TODO: should we guess the timebase frequency instead? */
         }
 
         for cpu in 0..cpus

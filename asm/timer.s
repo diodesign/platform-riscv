@@ -7,7 +7,7 @@
 .altmacro
 
 .section .text
-.align 4
+.align 8
 
 .global platform_timer_target
 .global platform_timer_get_target

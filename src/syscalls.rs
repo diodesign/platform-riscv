@@ -58,11 +58,19 @@ const SBI_EXT_RFENCE_SFENCE_VMA:        usize = 1;
 const SBI_LEGACY_REMOTE_FENCE_I:        usize = 5;
 const SBI_LEGACY_SFENCE_VMA:            usize = 6;
 
+/* system reset extension */
+const SBI_EXT_SYS_RESET:                usize = 0x53525354;
+const SBI_EXT_SYS_RESET_FUNC:           usize = 0;
+const SBI_EXT_SYS_RESET_SHUTDOWN:       usize = 0;
+const SBI_EXT_SYS_RESET_COLD_REBOOT:    usize = 1;
+const SBI_EXT_SYS_RESET_WARM_REBOOT:    usize = 2;
+
 static SBI_EXTS: &'static [usize] = &[
     /* modern extension format */
     SBI_EXT_BASE,
     SBI_EXT_TIMER,
     SBI_EXT_RFENCE,
+    SBI_EXT_SYS_RESET,
 
     /* legacy extensions */
     SBI_EXT_CONSOLE_PUTCHAR,
@@ -75,6 +83,7 @@ static SBI_EXTS: &'static [usize] = &[
 pub enum Action
 {
     Terminate,  /* terminate the running supervisor environment */
+    Restart, /* restart the running supervisor environment */
     TimerIRQAt(timer::TimerValue), /* raise a timer interrupt at or after the given time */
     OutputChar(char), /* the guest wants to write a character to the terminal */
     Unknown(usize, usize)
@@ -194,7 +203,25 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             it needs to trigger a timer interrupt at some point */
             success(context, 0);
             Some(Action::TimerIRQAt(timer::TimerValue::Exact(trigger_at)))
-        }
+        },
+
+        /* shutdown ABI call */
+        (SBI_EXT_SYS_RESET, SBI_EXT_SYS_RESET_FUNC) =>
+        {
+            /* TODO: ignore the reason for now, and switch on the shutdown/reboot type in a0.
+               FYI: for virtual environments, warm and cold reboots are the same */
+            match context.registers[irq::REG_A0] as usize
+            {
+                SBI_EXT_SYS_RESET_SHUTDOWN => Some(Action::Terminate),
+                SBI_EXT_SYS_RESET_WARM_REBOOT | SBI_EXT_SYS_RESET_COLD_REBOOT => Some(Action::Restart),
+                _ =>
+                {
+                    /* fail other types of shutdown/reboot */
+                    set_error_code(context, SBI_ERR_NOT_SUPPORTED);
+                    Some(Action::Unknown(SBI_EXT_SYS_RESET, SBI_EXT_SYS_RESET_FUNC))
+                }
+            }
+        },
 
         /* catch unhandled calls */
         (e, f) => 

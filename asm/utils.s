@@ -4,7 +4,7 @@
 # See LICENSE for usage and copying.
 
 .section .text
-.align 4
+.align 8
 
 .global platform_cpu_private_variables
 .global platform_cpu_heap_base

@@ -8,7 +8,7 @@
 .altmacro
 
 .section .text
-.align 4
+.align 8
 
 .global irq_early_init
 
@@ -71,7 +71,7 @@ irq_early_init:
 .endif
 .endm
 
-.align 4
+.align 8
 # Entry point for machine-level handler of interrupts and exceptions
 # interrupts are automatically disabled on entry.
 # right now, IRQs are non-reentrant. if an IRQ handler is interrupted, the previous one will

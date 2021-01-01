@@ -89,4 +89,17 @@ impl SerialPort
 
         true
     }
+
+    /* read in a byte from the serial port */
+    pub fn read(&self) -> Option<u8>
+    {
+        match &self.chip
+        {
+            Controllers::NS16550a(c) => match c.read_byte()
+            {
+                Ok(b) => Some(b),
+                Err(_) => return None
+            }   
+        }
+    }
 }
