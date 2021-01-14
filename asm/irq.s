@@ -49,8 +49,7 @@ irq_early_init:
 
   # enable all interrupts: set bit 3 in mstatus to enable machine irqs (MIE)
   # to receive hardware interrupts and exceptions
-  li    t0, 1 << 3
-  csrrs x0, mstatus, t0
+  csrrsi x0, mstatus, 1 << 3
   ret
 
 # macro to generate store instructions to push given 'reg' register
