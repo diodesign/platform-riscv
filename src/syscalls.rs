@@ -89,8 +89,18 @@ pub enum Action
     Unknown(usize, usize)
 }
 
+/* supported actions are assumed to suceed, though the hypervisor can call back
+   with an ActionResult to declare otherwise */
+pub enum ActionResult
+{
+    Failed,      /* the action didn't work */
+    Unsupported  /* the action isn't actually supported */
+}
+
 /* parse a syscall from a supervisor from the given context,
-returning an action for the hypervisor to take, if any */
+   returning an action for the hypervisor to take, if any.
+   assumes a syscall will be successful (if supported).
+   call failed() with an error code if the action failed */
 pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
 {
     let extension = context.registers[irq::REG_A7];
@@ -166,6 +176,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
         {
             /* TODO: handle remote cores */
             unsafe { llvm_asm!("fence.i") };
+            success(context, 0);
             None
         },
 
@@ -173,6 +184,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
         {
             /* TODO: handle remote cores, handle specific VMA ranges */
             unsafe { llvm_asm!("sfence.vma x0, x0") };
+            success(context, 0);
             None
         },
 
@@ -230,6 +242,15 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             Some(Action::Unknown(e, f))
         }
     }
+}
+
+pub fn failed(context: &mut irq::IRQContext, reason: ActionResult)
+{
+    set_error_code(context, match reason
+    {
+        ActionResult::Failed => SBI_ERR_FAILED,
+        ActionResult::Unsupported => SBI_ERR_NOT_SUPPORTED
+    });
 }
 
 /* set the error code of the syscall */
