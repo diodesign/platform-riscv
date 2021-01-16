@@ -258,27 +258,9 @@ impl Devices
             dt.edit_property(&cpu_node_path, &format!("riscv,isa"), DeviceTreeProperty::Text(isa));
         }
 
-        /* create virtual serial port based on the host's hardware */
-        match &self.debug_console
-        {
-            Some(con) =>
-            {
-                let phys_base = con.get_mmio_base();
-                let size = con.get_mmio_size();
-                let compat = con.get_compatibility().clone();
-
-                let uart_node_path = format!("/uart@{:x}", phys_base);
-                dt.edit_property(&uart_node_path, &format!("reg"),
-                    DeviceTreeProperty::MultipleUnsignedInt64_64(vec!((phys_base as u64, size as u64))));
-                dt.edit_property(&uart_node_path, &format!("status"), DeviceTreeProperty::Text(format!("okay")));
-                dt.edit_property(&uart_node_path, &format!("compatible"), DeviceTreeProperty::Text(compat));
-
-                /* let the guest kernel find this serial port for output */
-                let chosen_node_path = format!("/chosen");
-                dt.edit_property(&chosen_node_path, &format!("stdout-path"), DeviceTreeProperty::Text(uart_node_path.clone()));
-            },
-            None => ()
-        }
+        /* direct console IO through the SBI interface */
+        let chosen_node_path = format!("/chosen");
+        dt.edit_property(&chosen_node_path, &format!("bootargs"), DeviceTreeProperty::Text(format!("console=sbi, loglevel=8")));
 
         dt.set_boot_cpu_id(boot_cpu_id);
         match dt.to_blob()
