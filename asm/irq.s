@@ -108,15 +108,15 @@ machine_irq_handler:
   # in which case, we need to advance epc 4 bytes to the next instruction.
   # (all instructions are 4 bytes long, for RV32 and RV64)
   # otherwise, we're going into a loop when we return. do this now because the syscall
-  # could schedule in another context, so incrementing epc after kirq_handler
+  # could schedule in another context, so incrementing epc after hypervisor_irq_handler
   # may break a newly scheduled context. we increment mepc directly so that if another
   # context isn't scheduled in, epc will be correct.
   csrrs t0, mcause, x0
-  csrrs t1, mepc, x0
-  li    t2, 9             # mcause = 9 for environment call from supervisor-to-hypervisor
-  bne   t0, t2, continue  # ... all usermode ecalls are handled at the supervisor level
-  addi  t1, t1, 4         # ... and the hypervisor doesn't make ecalls into itself
-  csrrw x0, mepc, t1
+  li    t1, 9             # mcause = 9 for environment call from supervisor-to-hypervisor
+  bne   t0, t1, continue  # ... all usermode ecalls are handled at the supervisor level
+  csrrs t2, mepc, x0      # ... and the hypervisor doesn't make ecalls into itself
+  addi  t2, t2, 4
+  csrrw x0, mepc, t2
 
 continue:
   # pass current sp to exception/hw handler as a pointer. this'll allow
