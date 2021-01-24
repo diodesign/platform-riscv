@@ -137,6 +137,21 @@ impl Devices
         }
     }
 
+    /* get a character from the debug serial port
+       do not block waiting for a char to arrive.
+       just check if a byte is waiting for us */
+       pub fn read_debug_char(&self) -> Option<char>
+       {
+           if let Some(con) = &self.debug_console
+           {
+               if let Some(byte) = con.read()
+               {
+                   return Some(byte as char)
+               }
+           }
+           None
+       }
+
     /* return number of discovered logical CPU cores */
     pub fn get_nr_cpu_cores(&self) -> usize { self.nr_cpu_cores }
 
@@ -258,9 +273,9 @@ impl Devices
             dt.edit_property(&cpu_node_path, &format!("riscv,isa"), DeviceTreeProperty::Text(isa));
         }
 
-        /* direct console IO through the SBI interface */
+        /* direct console IO through the SBI interface, run OS in single-user mode */
         let chosen_node_path = format!("/chosen");
-        dt.edit_property(&chosen_node_path, &format!("bootargs"), DeviceTreeProperty::Text(format!("console=sbi, loglevel=8")));
+        dt.edit_property(&chosen_node_path, &format!("bootargs"), DeviceTreeProperty::Text(format!("1 console=hvc0")));
 
         dt.set_boot_cpu_id(boot_cpu_id);
         match dt.to_blob()
