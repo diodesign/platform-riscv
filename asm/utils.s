@@ -42,56 +42,63 @@ platform_cpu_heap_size:
 # at the top of the IRQ stack 
 # => a0 = pointer to SupervisorState structure to hold registers
 platform_save_supervisor_state:
-  # preserve all CSRs
+  # preserve all supervisor CSRs
   csrrs t0, sstatus, x0
-  csrrs t1, stvec, x0
-  csrrs t2, sip, x0
-  csrrs t3, sie, x0
-  csrrs t4, scounteren, x0
-  csrrs t5, sscratch, x0
-  csrrs t6, sepc, x0
+# csrrs t1, sedeleg, x0   # TODO: needs N extension
+# csrrs t2, sideleg, x0   # TODO: needs N extension
+  csrrs t3, stvec, x0
+  csrrs t4, sip, x0
+  csrrs t5, sie, x0
+  csrrs t6, scounteren, x0
 .if ptrwidth == 32
-  sw    t0, 0(a0)     # save 32-bit registers
-  sw    t1, 4(a0)
-  sw    t2, 8(a0)
+  sw    t0, 0(a0)     # save 4-byte 32-bit registers
+# sw    t1, 4(a0)     # sedeleg needs N extension
+# sw    t2, 8(a0)     # sideleg needs N extension
   sw    t3, 12(a0)
   sw    t4, 16(a0)
   sw    t5, 20(a0)
   sw    t6, 24(a0)
 .else
-  sd    t0, 0(a0)     # save 64-bit registers
-  sd    t1, 8(a0)
-  sd    t2, 16(a0)
+  sd    t0, 0(a0)     # save 8-byte 64-bit registers
+# sd    t1, 8(a0)     # sedeleg needs N extension
+# sd    t2, 16(a0)    # sideleg needs N extension
   sd    t3, 24(a0)
   sd    t4, 32(a0)
   sd    t5, 40(a0)
   sd    t6, 48(a0)
 .endif
 
-  csrrs t0, scause, x0
-  csrrs t1, stval, x0
-  csrrs t2, satp, x0
-  csrrs t3, mepc, x0    # preserve pc of interrupted code 
-  move  t4, s11         # preserve sp of interrupted code (stashed in s11)
+  csrrs t0, sscratch, x0
+  csrrs t1, sepc, x0
+  csrrs t2, scause, x0
+  csrrs t3, stval, x0
+  csrrs t4, satp, x0
+  csrrs t5, mepc, x0    # preserve pc of interrupted code
+  csrrs t6, mstatus, x0 # get underlying state of interrupted code
+
 .if ptrwidth == 32
   sw    t0, 28(a0)      # save 32-bit registers
   sw    t1, 32(a0)
   sw    t2, 36(a0)
   sw    t3, 40(a0)
   sw    t4, 44(a0)
+  sw    t5, 48(a0)
+  sw    t6, 52(a0)
 .else
   sd    t0, 56(a0)      # save 64-bit registers
   sd    t1, 64(a0)
   sd    t2, 72(a0)
   sd    t3, 80(a0)
   sd    t4, 88(a0)
+  sd    t5, 96(a0)
+  sd    t6, 104(a0)
 .endif
 
   # copy 32-bit or 64-bit registers from the IRQ stack
 .if ptrwidth == 32
-  addi  t0, a0, 48
+  addi  t0, a0, 56
 .else
-  addi  t0, a0, 96
+  addi  t0, a0, 112
 .endif
   csrrs t1, mscratch, x0
   addi  t1, t1, -(IRQ_REGISTER_FRAME_SIZE)
@@ -127,31 +134,31 @@ from_stack_copy_loop:
 # becomes active 
 # => a0 = pointer to SupervisorState structure to load registers
 platform_load_supervisor_state:
-  # restore all CSRs
+  # restore supervisor CSRs
 .if ptrwidth == 32
   lw    t0, 0(a0)
-  lw    t1, 4(a0)
-  lw    t2, 8(a0)
+# lw    t1, 4(a0)       # sedeleg needs N extension 
+# lw    t2, 8(a0)       # sideleg needs N extension
   lw    t3, 12(a0)
   lw    t4, 16(a0)
   lw    t5, 20(a0)
   lw    t6, 24(a0)
 .else
   ld    t0, 0(a0)
-  ld    t1, 8(a0)
-  ld    t2, 16(a0)
+# ld    t1, 8(a0)       # sedeleg needs N extension
+# ld    t2, 16(a0)      # sideleg needs N extension
   ld    t3, 24(a0)
   ld    t4, 32(a0)
   ld    t5, 40(a0)
   ld    t6, 48(a0)
 .endif
   csrrw x0, sstatus, t0
-  csrrw x0, stvec, t1
-  csrrw x0, sip, t2
-  csrrw x0, sie, t3
-  csrrw x0, scounteren, t4
-  csrrw x0, sscratch, t5
-  csrrw x0, sepc, t6
+# csrrw x0, sedeleg, t1   # needs N extension
+# csrrw x0, sideleg, t2   # needs N extension
+  csrrw x0, stvec, t3
+  csrrw x0, sip, t4
+  csrrw x0, sie, t5
+  csrrw x0, scounteren, t6
 
 .if ptrwidth == 32
   lw    t0, 28(a0)
@@ -159,24 +166,37 @@ platform_load_supervisor_state:
   lw    t2, 36(a0)
   lw    t3, 40(a0)
   lw    t4, 44(a0)
+  lw    t5, 48(a0)
+  lw    t6, 52(a0)
 .else
   ld    t0, 56(a0)
   ld    t1, 64(a0)
   ld    t2, 72(a0)
   ld    t3, 80(a0)
   ld    t4, 88(a0)
+  ld    t5, 96(a0)
+  ld    t6, 104(a0)
 .endif
-  csrrw x0, scause, t0
-  csrrw x0, stval, t1
-  csrrw x0, satp, t2
-  csrrw x0, mepc, t3      # restore pc of next context to run
-  move  s11, t4           # restore sp of next context (stashed in s11)
+
+  csrrw x0, sscratch, t0
+  csrrw x0, sepc, t1
+  csrrw x0, scause, t2
+  csrrw x0, stval, t3
+  csrrw x0, satp, t4      # change the page table base ptr
+  sfence.vma x0, x0       # make sure the MMU picks up the change
+  csrrw x0, mepc, t5      # restore pc of next context to run
+
+  # only update selected mstatus bits: mpp (11-12)
+  li    t0, (1 << 12) | (1 << 11)
+  csrrc x0, mstatus, t0
+  and   t6, t6, t0
+  csrrs x0, mstatus, t6
 
   # copy registers to the IRQ stack
 .if ptrwidth == 32
-  addi  t0, a0, 48
+  addi  t0, a0, 56
 .else
-  addi  t0, a0, 96
+  addi  t0, a0, 112
 .endif
   csrrs t1, mscratch, x0
   addi  t1, t1, -(IRQ_REGISTER_FRAME_SIZE)
