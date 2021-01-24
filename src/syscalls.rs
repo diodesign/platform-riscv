@@ -33,6 +33,7 @@ const SBI_ERR_ALREADY_AVAILABLE:        usize = (-6 as i32) as usize;
 
 /* SBI legacy functionality */
 const SBI_EXT_CONSOLE_PUTCHAR:          usize = 0x1;
+const SBI_EXT_CONSOLE_GETCHAR:          usize = 0x2;
 
 /* base functionality */
 const SBI_EXT_BASE:                     usize = 0x10;
@@ -74,6 +75,7 @@ static SBI_EXTS: &'static [usize] = &[
 
     /* legacy extensions */
     SBI_EXT_CONSOLE_PUTCHAR,
+    SBI_EXT_CONSOLE_GETCHAR,
     SBI_LEGACY_REMOTE_FENCE_I,
     SBI_LEGACY_TIMER_SET
 ];
@@ -86,6 +88,7 @@ pub enum Action
     Restart, /* restart the running supervisor environment */
     TimerIRQAt(timer::TimerValue), /* raise a timer interrupt at or after the given time */
     OutputChar(char), /* the guest wants to write a character to the terminal */
+    InputChar, /* the guest wants to read a character from the terminal */
     Unknown(usize, usize)
 }
 
@@ -114,7 +117,12 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             let c = context.registers[irq::REG_A0] as u8 as char;
             success(context, 0);
             Some(Action::OutputChar(c))
-        }
+        },
+        (SBI_EXT_CONSOLE_GETCHAR, _) =>
+        {
+            /* the hypervisor should return the character to the guest via success() */
+            Some(Action::InputChar)
+        },
 
         /* base SBI calls */
         (SBI_EXT_BASE, SBI_EXT_BASE_GET_SPEC_VERSION) =>
@@ -182,7 +190,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
 
         (SBI_LEGACY_SFENCE_VMA, _) | (SBI_EXT_RFENCE, SBI_EXT_RFENCE_SFENCE_VMA) =>
         {
-            /* TODO: handle remote cores, handle specific VMA ranges */
+            /* TODO: handle remote cores, handle specific VMA ranges and ASIDs */
             unsafe { llvm_asm!("sfence.vma x0, x0") };
             success(context, 0);
             None
@@ -244,6 +252,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
     }
 }
 
+/* indicate a syscall failed */
 pub fn failed(context: &mut irq::IRQContext, reason: ActionResult)
 {
     set_error_code(context, match reason
@@ -251,6 +260,12 @@ pub fn failed(context: &mut irq::IRQContext, reason: ActionResult)
         ActionResult::Failed => SBI_ERR_FAILED,
         ActionResult::Unsupported => SBI_ERR_NOT_SUPPORTED
     });
+}
+
+/* indicate a syscall succeeded and return the given value */
+pub fn result(context: &mut irq::IRQContext, value: usize)
+{
+    success(context, value);
 }
 
 /* set the error code of the syscall */
