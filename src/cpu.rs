@@ -22,6 +22,9 @@ extern "C"
 const CPUFEATURES_SUPERVISOR_MODE: usize = 1 << 18; /* supervisor mode is implemented */
 const CPUFEATURES_USER_MODE: usize       = 1 << 20; /* user mode is implemented */
 
+/* ensure supervisor code starts in supervisor mode by setting mpp=1 in mstatus */
+const MSTATUS_MPP_SUPERVISOR: Reg = 1 << 11;
+
 /* levels of privilege accepted by the hypervisor */
 #[derive(Copy, Clone, Debug)]
 pub enum PrivilegeMode
@@ -36,12 +39,14 @@ pub type Reg = usize;       /* a CPU register */
 pub type Entry = usize;     /* supervisor kernel entry point */
 
 /* describe the CPU state for supervisor-level code */
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct SupervisorState
 {
     /* supervisor-level CSRs */
     sstatus: Reg,
+    sedeleg: Reg, // needs the N extension
+    sideleg: Reg, // needs the N extension
     stvec: Reg,
     sip: Reg,
     sie: Reg,
@@ -51,14 +56,15 @@ pub struct SupervisorState
     scause: Reg,
     stval: Reg,
     satp: Reg,
-    pc: Entry,
-    sp: Reg,
+    mepc: Entry,
+    mstatus: Entry,
+
     /* standard register set (skip x0) */
     registers: [Reg; 31],
 }
 
 /* craft a blank supervisor CPU state and initialize it with the given entry paramters
-   this state will be used to start a supervisor kernel.
+   this state will be used to start a supervisor kernel or service.
    => cpu_nr = the CPU hart ID for this supervisor CPU core
       entry = address where execution will start for this supervisor
       dtb = physical address of the device tree blob describing
@@ -70,6 +76,8 @@ pub fn init_supervisor_state(cpu_nr: CPUcount, entry: Entry, dtb: PhysMemBase) -
     let mut state = SupervisorState
     {
         sstatus: 0,
+        sedeleg: 0,
+        sideleg: 0,
         stvec: 0,
         sip: 0,
         sie: 0,
@@ -79,8 +87,8 @@ pub fn init_supervisor_state(cpu_nr: CPUcount, entry: Entry, dtb: PhysMemBase) -
         scause: 0,
         stval: 0,
         satp: 0,
-        pc: entry,
-        sp: 0,
+        mepc: entry,
+        mstatus: MSTATUS_MPP_SUPERVISOR,
         registers: [0; 31]
     };
 
