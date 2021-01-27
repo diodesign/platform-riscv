@@ -8,6 +8,12 @@
  * See LICENSE for usage and copying.
  */
 
+/* SBI syscall space
+   As SBI implementation 5, we've got extension ID 0x0A000005. Here are the functions:
+   function 0 -- register system service
+
+*/
+
 #![allow(dead_code)]
 
 use super::irq;
@@ -18,6 +24,10 @@ const SBI_SPEC_VERSION: usize = 2;
 
 /* this is implementation ID 5, as per: https://github.com/riscv/riscv-sbi-doc/pull/62 */
 const SBI_IMPL_ID: usize = 5;
+
+/* define our firmware (SBI implementation) specific SBI calls */
+const SBI_EXT_DIOSIX:                   usize = 0x0A000000 + SBI_IMPL_ID;
+const SBI_EXT_DIOSIX_REG_SERVICE:       usize = 0;
 
 /* implementation version 1 */
 const SBI_IMPL_VERSION: usize = 1;
