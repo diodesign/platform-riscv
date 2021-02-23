@@ -90,6 +90,8 @@ pub fn emulate(_priv_mode: PrivilegeMode, context: &mut IRQContext) -> Emulation
     /* catch WFI as a yield to other supervisor kernels */
     if instruction == WFI_INST
     {
+        /* TODO: actually make the vCPU ait for an interrupt? */
+        increment_epc(); /* go to next instuction on return */
         return EmulationResult::Yield;
     }
 
@@ -97,7 +99,10 @@ pub fn emulate(_priv_mode: PrivilegeMode, context: &mut IRQContext) -> Emulation
     EmulationResult::IllegalInstruction
 }
 
-/* increment epc to the next 32-bit instruction */
+/* increment epc to the next 32-bit instruction.
+   TODO: How fragile is this? Assuming 4-byte instr and
+   also relying on mepc being used later on as the interrupted
+   program counter */
 fn increment_epc()
 {
     let epc = read_csr!(mepc);
