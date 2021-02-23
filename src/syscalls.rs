@@ -10,7 +10,17 @@
 
 /* SBI syscall space
    As SBI implementation 5, we've got extension ID 0x0A000005. Here are the functions:
-   function 0 -- register system service
+   function  0 -- yield to another virtual core, if possible
+   function  1 -- register system service
+                  => a0 = service ID requested to register
+   function  2 -- write character to capsule's stdin buffer (req console_write)
+                  => a0 = character to write
+                     a1 = ID of capsule to write to
+   function  3 -- read character from capsules' stdout buffers (req console_read)
+                  <= a0 = character read (or -1 for none)
+                     a1 = ID of capsule read if a0 != -1
+   function  4 -- read character from hypervior log output (req hv_log_read)
+                  <= a0 = character read (or -1 for none)
 
 */
 
@@ -27,9 +37,13 @@ const SBI_IMPL_ID: usize = 5;
 
 /* define our firmware (SBI implementation) specific SBI calls */
 const SBI_EXT_DIOSIX:                   usize = 0x0A000000 + SBI_IMPL_ID;
-const SBI_EXT_DIOSIX_REG_SERVICE:       usize = 0;
+const SBI_EXT_DIOSIX_YIELD:             usize = 0;
+const SBI_EXT_DIOSIX_REGISTER_SERVICE:  usize = 1;
+const SBI_EXT_DIOSIX_CONSOLE_PUTC:      usize = 2;
+const SBI_EXT_DIOSIX_CONSOLE_GETC:      usize = 3;
+const SBI_EXT_DIOSIX_HV_GETC:           usize = 4;
 
-/* implementation version 1 */
+/* SBI implementation version 1 */
 const SBI_IMPL_VERSION: usize = 1;
 
 /* SBI error codes */
@@ -77,11 +91,12 @@ const SBI_EXT_SYS_RESET_COLD_REBOOT:    usize = 1;
 const SBI_EXT_SYS_RESET_WARM_REBOOT:    usize = 2;
 
 static SBI_EXTS: &'static [usize] = &[
-    /* modern extension format */
+    /* modern extensions */
     SBI_EXT_BASE,
     SBI_EXT_TIMER,
     SBI_EXT_RFENCE,
     SBI_EXT_SYS_RESET,
+    SBI_EXT_DIOSIX,
 
     /* legacy extensions */
     SBI_EXT_CONSOLE_PUTCHAR,
@@ -94,11 +109,16 @@ static SBI_EXTS: &'static [usize] = &[
 #[derive(Debug)]
 pub enum Action
 {
+    Yield, /* yield this physical CPU core to another virtual core, if possible */
     Terminate,  /* terminate the running supervisor environment */
     Restart, /* restart the running supervisor environment */
     TimerIRQAt(timer::TimerValue), /* raise a timer interrupt at or after the given time */
-    OutputChar(char), /* the guest wants to write a character to the terminal */
-    InputChar, /* the guest wants to read a character from the terminal */
+    OutputChar(char), /* the guest wants to write a character to the console */
+    InputChar, /* the guest wants to read a character from the console */
+    ConsoleBufferWriteChar(char, usize), /* console capsule wants to write to a guest's console buffer */
+    ConsoleBufferReadChar, /* console capsule wants to read next byte in a guest console buffer */
+    HypervisorBufferReadChar, /* console capsule wants to read next byte in hypervisor console buffer */
+    RegisterService(usize), /* capsule wishes to register a service that other capsules can message */
     Unknown(usize, usize)
 }
 
@@ -107,6 +127,8 @@ pub enum Action
 pub enum ActionResult
 {
     Failed,      /* the action didn't work */
+    Denied,      /* the action wasn't permitted */
+    BadParams,   /* the action's parameters were invalid */
     Unsupported  /* the action isn't actually supported */
 }
 
@@ -253,6 +275,46 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             }
         },
 
+        /* diosix-specific ABI calls */
+        /* yield to another virtual core */
+        (SBI_EXT_DIOSIX, SBI_EXT_DIOSIX_YIELD) =>
+        {
+            success(context, 0);
+            Some(Action::Yield)
+        },
+
+        /* register a capsule as a service provider */
+        (SBI_EXT_DIOSIX, SBI_EXT_DIOSIX_REGISTER_SERVICE) =>
+        {
+            let service_id = context.registers[irq::REG_A0];
+            success(context, 0);
+            Some(Action::RegisterService(service_id))
+        },
+
+        /* write a character to a capsule's stdin buffer */
+        (SBI_EXT_DIOSIX, SBI_EXT_DIOSIX_CONSOLE_PUTC) =>
+        {
+            let character = (context.registers[irq::REG_A0] & 0xff) as u8 as char;
+            let capsule_id = context.registers[irq::REG_A1];
+
+            success(context, 0);
+            Some(Action::ConsoleBufferWriteChar(character, capsule_id))
+        },
+
+        /* read next character from the capsules' stdin buffer */
+        (SBI_EXT_DIOSIX, SBI_EXT_DIOSIX_CONSOLE_GETC) =>
+        {
+            /* the hypervisor should return the character and its capsule ID to the guest */
+            Some(Action::ConsoleBufferReadChar)
+        },
+
+        /* read next character from the hypervisor's debug log buffer */
+        (SBI_EXT_DIOSIX, SBI_EXT_DIOSIX_HV_GETC) =>
+        {
+            /* the hypervisor should return the character to the guest */
+            Some(Action::HypervisorBufferReadChar)
+        },
+
         /* catch unhandled calls */
         (e, f) => 
         {
@@ -268,6 +330,8 @@ pub fn failed(context: &mut irq::IRQContext, reason: ActionResult)
     set_error_code(context, match reason
     {
         ActionResult::Failed => SBI_ERR_FAILED,
+        ActionResult::Denied => SBI_ERR_DENIED,
+        ActionResult::BadParams => SBI_ERR_INVALID_PARAM,
         ActionResult::Unsupported => SBI_ERR_NOT_SUPPORTED
     });
 }
@@ -275,7 +339,30 @@ pub fn failed(context: &mut irq::IRQContext, reason: ActionResult)
 /* indicate a syscall succeeded and return the given value */
 pub fn result(context: &mut irq::IRQContext, value: usize)
 {
+    /* SBI ABI standard response */
     success(context, value);
+}
+
+/* Linux expects some RISC-V SBI calls (eg, getc()) to return the value
+   in the *error* field. Make this happen: zero the value field
+   and store the result value in the error field */
+pub fn result_as_error(context: &mut irq::IRQContext, value: usize)
+{
+    success(context, 0);
+    set_error_code(context, value);
+}
+
+/* as with result() bur return one extra value */
+pub fn result_1extra(context: &mut irq::IRQContext, value: usize, extra1: usize)
+{
+    set_error_code(context, SBI_SUCCESS);
+    context.registers[irq::REG_A1] = value;
+
+    /* the SBI ABI says a0 and a1 must return an error code and a result, respectively.
+       it doesn't say that you can't return other values in other registers. in our
+       ABI space, we sometimes return an extra value in a2. don't return extra
+       values for SBI calls outside our ABI space (extension ID 0x0A000005) */
+    context.registers[irq::REG_A2] = extra1;
 }
 
 /* set the error code of the syscall */
@@ -284,7 +371,8 @@ fn set_error_code(context: &mut irq::IRQContext, error_code: usize)
     context.registers[irq::REG_A0] = error_code;
 }
 
-/* set return code as success and save result */
+/* set return code as success and save result.
+   warning: blows A0 and A1! */
 fn success(context: &mut irq::IRQContext, result: usize)
 {
     set_error_code(context, SBI_SUCCESS);
