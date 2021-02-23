@@ -146,7 +146,12 @@ impl Devices
            {
                if let Some(byte) = con.read()
                {
-                   return Some(byte as char)
+                   match byte
+                   {
+                       /* ignore null bytes */
+                       0 => return None,
+                       b => return Some(b as char)
+                   }
                }
            }
            None
@@ -271,11 +276,17 @@ impl Devices
             /* get the lower case ISA string */
             let isa = (cpu::CPUDescription).isa_to_string().to_lowercase();
             dt.edit_property(&cpu_node_path, &format!("riscv,isa"), DeviceTreeProperty::Text(isa));
+
+            /* create an interrupt controller for this CPU core */
+            let intc_node_path = format!("{}/interrupt-controller", &cpu_node_path);
+            dt.edit_property(&intc_node_path, &format!("#interrupt-cells"), DeviceTreeProperty::UnsignedInt32(1));
+            dt.edit_property(&intc_node_path, &format!("interrupt-controller"), DeviceTreeProperty::Empty);
+            dt.edit_property(&intc_node_path, &format!("compatible"), DeviceTreeProperty::Text(format!("riscv,cpu-intc")));
         }
 
         /* direct console IO through the SBI interface, run OS in single-user mode */
         let chosen_node_path = format!("/chosen");
-        dt.edit_property(&chosen_node_path, &format!("bootargs"), DeviceTreeProperty::Text(format!("1 console=hvc0")));
+        dt.edit_property(&chosen_node_path, &format!("bootargs"), DeviceTreeProperty::Text(format!("console=hvc0")));
 
         dt.set_boot_cpu_id(boot_cpu_id);
         match dt.to_blob()
