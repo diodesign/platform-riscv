@@ -65,13 +65,14 @@ pub struct SupervisorState
 
 /* craft a blank supervisor CPU state and initialize it with the given entry paramters
    this state will be used to start a supervisor kernel or service.
-   => cpu_nr = the CPU hart ID for this supervisor CPU core
+   => cpu_nr = the virtual CPU hart ID for this supervisor CPU core
+      cpu_total = total number of virtual CPU cores in this capsule
       entry = address where execution will start for this supervisor
       dtb = physical address of the device tree blob describing
             the supervisor's virtual hardware.
             it's safe to assume the RAM immediately below this is usable as
             the DTB is copied into the top-most bytes of available RAM */
-pub fn init_supervisor_state(cpu_nr: CPUcount, entry: Entry, dtb: PhysMemBase) -> SupervisorState
+pub fn init_supervisor_state(cpu_nr: CPUcount, cpu_total: CPUcount, entry: Entry, dtb: PhysMemBase) -> SupervisorState
 {
     let mut state = SupervisorState
     {
@@ -92,12 +93,14 @@ pub fn init_supervisor_state(cpu_nr: CPUcount, entry: Entry, dtb: PhysMemBase) -
         registers: [0; 31]
     };
 
-    /* supervisor CPU entry conditions (as expected by the Linux kernel):
-       x10 aka a0 = CPU hart ID
-       x11 aka a1 = environment's device tree blob
+    /* supervisor CPU entry conditions (as per SBI and Diosix specification)
+       x10 aka a0 = CPU hart ID (SBI)
+       x11 aka a1 = environment's device tree blob (SBI)
+       x12 aka a2 = total number of CPU harts available (Diosix)
        don't forget to skip over x0 (zero) which isn't included in the state */
     state.registers[10 - 1] = cpu_nr;
     state.registers[11 - 1] = dtb;
+    state.registers[12 - 1] = cpu_total;
     state
 }
 
