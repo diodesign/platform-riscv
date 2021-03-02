@@ -29,8 +29,6 @@ pub enum EmulationResult
 /* instructions we can handle here */
 const RDTIME_INST:  u32 = 0xc01 << 20 | 2 << 12 | 0x1c << 2 | 3;
 const RDTIME_MASK:  u32 = !(0x1f << 7);
-const RDTIMEH_INST: u32 = 0xc81 << 20 | 2 << 12 | 0x1c << 2 | 3;
-const RDTIMEH_MASK: u32 = !(0x1f << 7);
 const WFI_INST:     u32 = 0x10500073;
 
 /* attempt to emulate the currently faulting instruction. this can use and modify
@@ -48,8 +46,7 @@ pub fn emulate(_priv_mode: PrivilegeMode, context: &mut IRQContext) -> Emulation
     /* ensure any faults are blamed on the mode that tried to execute the instruction */
     let instruction = unsafe { platform_read_u32_as_prev_mode(addr) };
 
-    /* try to enulate the rdtime instruction, which reads the 64-bit real-time clock.
-    on rv32, the low 32-bits are returned. on rv64, all bits are returned */
+    /* try to enulate the rdtime instruction, which reads the 64-bit real-time clock */
     if (instruction & RDTIME_MASK) == RDTIME_INST
     {
         let time_now = match (timer::get_pinned_timer_now(), timer::get_pinned_timer_freq())
@@ -64,27 +61,6 @@ pub fn emulate(_priv_mode: PrivilegeMode, context: &mut IRQContext) -> Emulation
 
         increment_epc(); /* go to next instuction */
         return EmulationResult::Success;
-    }
-
-    /* try to enulate the rdtime instruction, which reads the upper 32 bites of the
-    64-bit real-time clock. instruction doesn't exist on non-rv32i systems */
-    if cfg!(target_arch = "riscv32")
-    {
-        if (instruction & RDTIMEH_MASK) == RDTIMEH_INST
-        {
-            let time_now = match (timer::get_pinned_timer_now(), timer::get_pinned_timer_freq())
-            {
-                (Some(t), Some(f)) => t.to_exact(f),
-                (_, _) => return EmulationResult::CantEmulate
-            };
-
-            /* update destination register with current high word of the timer */
-            let rd = ((instruction & !RDTIME_MASK) >> 7) & RDTIME_MASK;
-            context.registers[rd as usize] = (time_now >> 32) as usize;
-
-            increment_epc(); /* go to next instuction */
-            return EmulationResult::Success;
-        }
     }
 
     /* catch WFI as a yield to other supervisor kernels */
