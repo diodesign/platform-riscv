@@ -1,4 +1,4 @@
-# diosix hypervisor common low-level entry points for RV32I/RV64I platforms
+# diosix hypervisor common low-level entry points for RV64I platforms
 #
 # Assumes on entry: a0 = CPU/Hart ID number, a1 -> device tree
 #
@@ -96,13 +96,11 @@ clear_bss:
   la        t2, __bss_end
   bgeu      t1, t2, clear_bss_loop_end # avoid empty or malformed bss 
 clear_bss_loop:
-.if ptrwidth == 32
-  sw        x0, (t1)
-  addi      t1, t1, 4
-.else
+  # for rv32 targets only
+  # sw      x0, (t1)
+  # addi    t1, t1, 4
   sd        x0, (t1)
   addi      t1, t1, 8
-.endif
   bltu      t1, t2, clear_bss_loop
 
 clear_bss_loop_end:
