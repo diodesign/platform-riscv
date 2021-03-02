@@ -1,4 +1,4 @@
-/* diosix RV32G/RV64G hardware serial port abstraction
+/* diosix RV64G hardware serial port abstraction
  *
  * This creates a generic serial port that calls down
  * to a hardware-specific implementation selected by the

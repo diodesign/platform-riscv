@@ -1,4 +1,4 @@
-/* diosix RV32G/RV64G hardware timer control for scheduler
+/* diosix RV64G hardware timer control for scheduler
  *
  * (c) Chris Williams, 2019.
  *

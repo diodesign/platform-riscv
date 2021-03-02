@@ -1,4 +1,4 @@
-/* base hardware peripherals on RV32/64 systems
+/* base hardware peripherals on RV64 systems
  *
  * discover hardware from a firmware-supplied device tree 
  * 

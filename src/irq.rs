@@ -1,4 +1,4 @@
-/* diosix RV32G/RV64G common exception/interrupt hardware-specific code
+/* diosix RV64G common exception/interrupt hardware-specific code
  *
  * (c) Chris Williams, 2019-2020.
  *
@@ -113,10 +113,10 @@ pub const REG_T6: usize  = 31;
 #[derive(Debug, Copy, Clone)]
 pub struct IRQContext
 {
-    /* all 32 registers stacked. the contents of this array will be
+    /* all 32 base registers stacked. the contents of this array will be
     loaded into the registers on exit from the IRQ, so if you want
     to modify any register content, do it here */
-    pub registers: [usize; 32],
+    pub registers: [usize; 32]
 }
 
 /* dispatch

@@ -1,4 +1,4 @@
-/* diosix RV32/RV64 test harness support
+/* diosix RV64 test harness support
  *
  * (c) Chris Williams, 2019.
  *

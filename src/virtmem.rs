@@ -1,4 +1,4 @@
-/* diosix RV32G/RV64G code for managing guest virtual memory
+/* diosix RV64G code for managing guest virtual memory
  *
  * (c) Chris Williams, 2019.
  *

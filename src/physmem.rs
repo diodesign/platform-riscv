@@ -1,4 +1,4 @@
-/* diosix RV32G/RV64G code for managing physical memory
+/* diosix RV64G code for managing physical memory
  *
  * (c) Chris Williams, 2019-2020.
  *
@@ -277,13 +277,14 @@ fn write_pmp_entry(entry_id: usize, value: usize)
 {
     let (pmp_cfg_id, offset) = match cpu::get_isa_width()
     {
-        32 =>
+        /* for RV32 targets only */
+        /* 32 =>
         {
-            /* four PMP entries to a 32-bit pmpcfg register */
+            // four PMP entries to a 32-bit pmpcfg register
             let pmp_cfg_id = entry_id >> 2;
             let offset = entry_id - (pmp_cfg_id << 2);
             (pmp_cfg_id, offset)
-        },
+        }, */
 
         64 =>
         {
@@ -304,28 +305,10 @@ fn write_pmp_entry(entry_id: usize, value: usize)
     write_pmpcfg(pmp_cfg_id, cfgbits | ((value & 0xff) << (offset << 3)));
 }
 
-/* read_pmpcfg (32-bit)
-   Read the 32-bit value of the given PMP configuration register (pmpcfg0-3)
-   => register = selects N out of pmpcfgN, where N = 0 to 3
-   <= value of the CSR, or 0 for can't read. Warning: this fails silently, therefore */
-#[cfg(target_arch = "riscv32")]
-fn read_pmpcfg(register: usize) -> usize
-{
-    match register
-    {
-        0 => read_csr!(pmpcfg0),
-        1 => read_csr!(pmpcfg1),
-        2 => read_csr!(pmpcfg2),
-        3 => read_csr!(pmpcfg3),
-        _ => 0
-    }
-}
-
-/* read_pmpcfg (64-bit)
+/* read_pmpcfg
    Read the 64-bit value of the given PMP configuration register (pmpcfg0 or 2)
    => register = selects N out of pmpcfgN, where N = 0 or 2
    <= value of the CSR, or 0 for can't read. Warning: this fails silently, therefore */
-#[cfg(target_arch = "riscv64")]
 fn read_pmpcfg(register: usize) -> usize
 {
     /* we must conditionally compile this because pmpcfg1 and pmpcfg3 aren't defined for riscv64 */
@@ -337,28 +320,10 @@ fn read_pmpcfg(register: usize) -> usize
     }
 }
 
-/* write_pmpcfg (32-bit)
-   Write value to the given PMP configuration register (pmpcfg0-3). Warning: silently fails
-   => register = selects N out of pmpcfgN, where N = 0 to 3
-      value = 32-bit value to write */
-#[cfg(target_arch = "riscv32")]
-fn write_pmpcfg(register: usize, value: usize)
-{
-    match register
-    {
-        0 => write_csr!(pmpcfg0, value),
-        1 => write_csr!(pmpcfg1, value),
-        2 => write_csr!(pmpcfg2, value),
-        3 => write_csr!(pmpcfg3, value),
-        _ => ()
-    };
-}
-
-/* write_pmpcfg (64-bit)
+/* write_pmpcfg
    Write 64-bit value to the given PMP configuration register (pmpcfg0 or 2). Warning: silently fails
    => register = selects N out of pmpcfgN, where N = 0 or 2
       value = 32-bit value to write */
-#[cfg(target_arch = "riscv64")]
 fn write_pmpcfg(register: usize, value: usize)
 {
     /* we must conditionally compile this because pmpcfg1 and pmpcfg3 aren't defined for riscv64 */

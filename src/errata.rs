@@ -1,4 +1,4 @@
-/* known errata on RV32/64 systems
+/* known errata on RV64 systems
  *
  * (c) Chris Williams, 2020.
  *
