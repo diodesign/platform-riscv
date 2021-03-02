@@ -1,4 +1,4 @@
-/* diosix RV32/RV64 physical CPU core management
+/* diosix RV64 physical CPU core management
  *
  * (c) Chris Williams, 2019-2020.
  *
@@ -13,17 +13,32 @@ use super::physmem::PhysMemBase;
 
 extern "C"
 {
-    fn platform_save_supervisor_state(state: &SupervisorState);
-    fn platform_load_supervisor_state(state: &SupervisorState);
+    fn platform_save_supervisor_cpu_state(state: &mut SupervisorState);
+    fn platform_load_supervisor_cpu_state(state: &SupervisorState);
+
+    fn platform_save_supervisor_fp32_state(regs:  &mut FP32Registers);
+    fn platform_save_supervisor_fp64_state(regs:  &mut FP64Registers);
+    fn platform_load_supervisor_fp32_state(regs:  &FP32Registers);
+    fn platform_load_supervisor_fp64_state(regs:  &FP64Registers);
+
     fn platform_set_supervisor_return();
 }
 
 /* flags within CPUFeatures, derived from misa */
+const CPUFEATURES_DP_FPU: usize          = 1 << 3;  /* extension D: Double-Precision Floating-Point */
+const CPUFEATURES_SP_FPU: usize          = 1 << 5;  /* extension F: Single-Precision Floating-Point */
 const CPUFEATURES_SUPERVISOR_MODE: usize = 1 << 18; /* supervisor mode is implemented */
 const CPUFEATURES_USER_MODE: usize       = 1 << 20; /* user mode is implemented */
 
 /* ensure supervisor code starts in supervisor mode by setting mpp=1 in mstatus */
 const MSTATUS_MPP_SUPERVISOR: Reg = 1 << 11;
+
+/* control bits for detecting dirty state of FP registers in mstatus */
+const MSTATUS_FS_SHIFT: Reg = 13; /* FS field starts at bit 13 in mstatus */
+const MSTATUS_FS_MASK:  Reg = 0b11; /* FS field is 2 bits wide */
+const MSTATUS_FS_DIRTY: Reg = 3; /* dirty indicates something changed FP registers */
+const MSTATUS_FS_CLEAN: Reg = 2; /* clean indicates nothing changed the FP registers */
+const MSTATUS_FS_OFF:   Reg = 0; /* off indicates no valid FPU present */
 
 /* levels of privilege accepted by the hypervisor */
 #[derive(Copy, Clone, Debug)]
@@ -63,6 +78,26 @@ pub struct SupervisorState
     registers: [Reg; 31],
 }
 
+/* supported floating-point registers, if present, are 32 or 64 bits wide.
+   the 128-bit FFI ABI isn't stable yet so we'll ignore it and treat it as 64-bit for now */
+type FP32Registers = [f32; 32];
+type FP64Registers = [f64; 32];
+
+/* possible supervisor-level fp registers */
+enum SupervisorFPRegisters
+{
+    None,
+    SinglePrecision(FP32Registers),
+    DoublePrecision(FP64Registers)
+}
+
+/* describe FP register state for supervisor-level code */
+pub struct SupervisorFPState
+{
+    fcsr: usize,
+    registers: SupervisorFPRegisters
+}
+
 /* craft a blank supervisor CPU state and initialize it with the given entry paramters
    this state will be used to start a supervisor kernel or service.
    => cpu_nr = the virtual CPU hart ID for this supervisor CPU core
@@ -72,7 +107,7 @@ pub struct SupervisorState
             the supervisor's virtual hardware.
             it's safe to assume the RAM immediately below this is usable as
             the DTB is copied into the top-most bytes of available RAM */
-pub fn init_supervisor_state(cpu_nr: CPUcount, cpu_total: CPUcount, entry: Entry, dtb: PhysMemBase) -> SupervisorState
+pub fn init_supervisor_cpu_state(cpu_nr: CPUcount, cpu_total: CPUcount, entry: Entry, dtb: PhysMemBase) -> SupervisorState
 {
     let mut state = SupervisorState
     {
@@ -104,23 +139,109 @@ pub fn init_supervisor_state(cpu_nr: CPUcount, cpu_total: CPUcount, entry: Entry
     state
 }
 
+/* initalize the floating-point register state for supervisor code based on the underlying physical CPU's capabilities */
+pub fn init_supervisor_fp_state() -> SupervisorFPState
+{
+    let features = features();
+
+    /* decode thus pCPU's misa bits F and D into the supported bit width, or 0 for no FP.
+        --- = no FP hardware support
+        --F = single-precision FP support
+        -DF = double-precision FP support */
+    let width = match (features & CPUFEATURES_DP_FPU, features & CPUFEATURES_SP_FPU)
+    {
+        (                 0, CPUFEATURES_SP_FPU) => 32,
+        (CPUFEATURES_DP_FPU, CPUFEATURES_SP_FPU) => 64,
+        _ => 0
+    };
+
+    SupervisorFPState
+    {
+        fcsr: 0,
+        registers: match width
+        {
+            32 => SupervisorFPRegisters::SinglePrecision([0.0; 32]),
+            64 => SupervisorFPRegisters::DoublePrecision([0.0; 32]),
+            _ => SupervisorFPRegisters::None,
+        }
+    }
+}
+
 /* save the supervisor CPU state to memory. only call from an IRQ context
    as it relies on the IRQ stacked registers. 
    => state = state area to use to store supervisor state */
-pub fn save_supervisor_state(state: &SupervisorState)
+pub fn save_supervisor_cpu_state(state: &mut SupervisorState)
 {
-    /* stores CSRs and x1-x31 to memory */
-    unsafe { platform_save_supervisor_state(state); }
+    /* stores base CSRs and x1-x31 registers to memory */
+    unsafe { platform_save_supervisor_cpu_state(state); }
 }
 
-/* load the supervisor CPU state from memory. only call from an IRQ context
+/* save the supervisor floating-point CPU state to memory
+   => fp_state = state area to use to store supervisor FP state */
+pub fn save_supervisor_fp_state(fp_state: &mut SupervisorFPState)
+{
+    /* only copy fp registers to memory if the dirty flag is set in live mstatus.
+       if the FPU is not present (FS = Off) then also bail out */
+    if (read_csr!(mstatus) >> MSTATUS_FS_SHIFT) & MSTATUS_FS_MASK != MSTATUS_FS_DIRTY
+    {
+        return;
+    }
+
+    /* store FP f0-f31 registers to memory */
+    unsafe
+    {
+        match fp_state.registers
+        {
+            SupervisorFPRegisters::None => return,
+            SupervisorFPRegisters::SinglePrecision(mut sp) => platform_save_supervisor_fp32_state(&mut sp),
+            SupervisorFPRegisters::DoublePrecision(mut dp) => platform_save_supervisor_fp64_state(&mut dp)
+        }
+    }
+
+    /* we wouldn't be here if there was no FPU, so safely read its CSR */
+    fp_state.fcsr = read_csr!(fcsr);
+}
+
+/* load the supervisor CPU and FP state from memory. only call from an IRQ context
    as it relies on the IRQ stacked registers. returning to supervisor mode
    will pick up the new supervisor context.
-   => state = state area to use to store supervisor state */
-pub fn load_supervisor_state(state: &SupervisorState)
+   => state = supervisor CPU state to load from memory to registers
+      fp_state = supervisor FP state to load from memory to registers*/
+pub fn load_supervisor_cpu_fp_state(state: &SupervisorState, fp_state: &SupervisorFPState)
 {
-    /* stores CSRs and x1-x31 to memory */
-    unsafe { platform_load_supervisor_state(state); }
+    /* loads base CSRs and x1-x31 into registers from memory */
+    unsafe { platform_load_supervisor_cpu_state(state); }
+
+    /* only load floating-point registers from memory if FPU is present */
+    if (read_csr!(mstatus) >> MSTATUS_FS_SHIFT) & MSTATUS_FS_MASK != MSTATUS_FS_OFF
+    {
+        load_supervisor_fp_state(fp_state);
+
+        /* set fs field to clean in live mstatus register. if the FP registers remain
+           untouched during this timeslice then we won't waste time copying registers
+           to memory */
+        let mstatus = read_csr!(mstatus) & !(MSTATUS_FS_MASK << MSTATUS_FS_SHIFT);
+        write_csr!(mstatus, mstatus | (MSTATUS_FS_CLEAN << MSTATUS_FS_SHIFT));
+    }
+}
+
+/* load the supervisor floating-point state from memory
+   => fp_state = supervisor FP state to load from memory to registers */
+fn load_supervisor_fp_state(fp_state: &SupervisorFPState)
+{
+    /* loads FP f0-f31 registers from memory */
+    unsafe
+    {
+        match fp_state.registers
+        {
+            SupervisorFPRegisters::None => return,
+            SupervisorFPRegisters::SinglePrecision(sp) => platform_load_supervisor_fp32_state(&sp),
+            SupervisorFPRegisters::DoublePrecision(dp) => platform_load_supervisor_fp64_state(&dp)
+        }
+    }
+
+    /* we wouldn't be here if there was no FPU, so safely update its CSR */
+    write_csr!(fcsr, fp_state.fcsr);
 }
 
 /* run in an IRQ context. tweak necessary bits to ensure we return to supervisor mode */
@@ -177,17 +298,9 @@ pub fn get_isa_width() -> usize
 
     TODO: check misa */
 
-    let isa_width = if cfg!(target_arch = "riscv32")
-    {
-        32
-    }
-    else if cfg!(target_arch = "riscv64")
+    let isa_width = if cfg!(target_arch = "riscv64")
     {
         64
-    }
-    else if cfg!(target_arch = "riscv128")
-    {
-        128
     }
     else
     {
