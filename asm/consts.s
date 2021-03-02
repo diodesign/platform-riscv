@@ -1,18 +1,19 @@
-# diosix hypervisor memory locations and layout for common RV32G/RV64G targets
+# diosix hypervisor memory locations and layout for common RV64G targets
 #
 # (c) Chris Williams, 2018-2020.
 # See LICENSE for usage and copying.
 
 .equ PAGE_SIZE, (4096)
 
-# during interrupts and exceptions, reserve space for 32 registers, 32 or 64 bits wide
-.if ptrwidth == 32
-.equ  IRQ_REGISTER_FRAME_SIZE,   (32 * 4)   # RV32
-.elseif ptrwidth == 64
-.equ  IRQ_REGISTER_FRAME_SIZE,   (32 * 8)   # rV64
-.else
-.error "Only 32-bit and 64-bit RISC-V supported (unexpected pointer width)"
+# for now, we only support 64-bit RISC-V.
+# If you want to maintain 32-bit support, please get in touch.
+.if ptrwidth != 64
+.error "Only 64-bit RISC-V supported (unexpected pointer width)"
 .endif
+
+# during interrupts and exceptions, reserve space for 32 registers, eight bytes wide
+# .equ  IRQ_REGISTER_FRAME_SIZE, (32 * 4)   # RV32
+.equ  IRQ_REGISTER_FRAME_SIZE,   (32 * 8)   # RV64
 
 # the hypervisor is laid out as follows in physical memory on bootup, ascending:
 # (all addresses should be 4KB word aligned, and defined in the target ld script)
