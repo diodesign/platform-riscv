@@ -58,6 +58,7 @@ const SBI_ERR_ALREADY_AVAILABLE:        usize = (-6 as i32) as usize;
 /* SBI legacy functionality */
 const SBI_EXT_CONSOLE_PUTCHAR:          usize = 0x1;
 const SBI_EXT_CONSOLE_GETCHAR:          usize = 0x2;
+const SBI_EXT_SHUTDOWN:                 usize = 0x8;
 
 /* base functionality */
 const SBI_EXT_BASE:                     usize = 0x10;
@@ -156,6 +157,12 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             Some(Action::InputChar)
         },
 
+        /* legacy shutdown extension (also see the newer system shutdown API) */
+        (SBI_EXT_SHUTDOWN, _) =>
+        {
+            Some(Action::Terminate)
+        },
+
         /* base SBI calls */
         (SBI_EXT_BASE, SBI_EXT_BASE_GET_SPEC_VERSION) =>
         {
@@ -237,19 +244,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             /* ensure the timer is enabled at our end */
             super::timer::enable_supervisor_irq();
 
-            let trigger_at: u64 = if cfg!(target_arch = "riscv32")
-            {
-                context.registers[irq::REG_A0] as u64 |
-                ((context.registers[irq::REG_A1] as u64) << 32)
-            }
-            else if cfg!(target_arch = "riscv64")
-            {
-                context.registers[irq::REG_A0] as u64
-            }
-            else
-            {
-                unreachable!(); /* we don't support non-rv32/rv64 */
-            };
+            let trigger_at: u64 =  context.registers[irq::REG_A0] as u64;
 
             /* let the supervisor know this worked, and let the hypervisor know
             it needs to trigger a timer interrupt at some point */
@@ -257,7 +252,7 @@ pub fn handler(context: &mut irq::IRQContext) -> Option<Action>
             Some(Action::TimerIRQAt(timer::TimerValue::Exact(trigger_at)))
         },
 
-        /* shutdown ABI call */
+        /* newer system shutdown ABI call */
         (SBI_EXT_SYS_RESET, SBI_EXT_SYS_RESET_FUNC) =>
         {
             /* TODO: ignore the reason for now, and switch on the shutdown/reboot type in a0.
