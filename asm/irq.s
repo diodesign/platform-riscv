@@ -1,4 +1,4 @@
-# hypervisor low-level interrupt/exception code for RV32G/RV64G targets
+# hypervisor low-level interrupt/exception code for RV64G targets
 #
 # Note: No support for F/D floating point (yet)!
 #
@@ -54,20 +54,14 @@ irq_early_init:
 
 # macro to generate store instructions to push given 'reg' register
 .macro PUSH_REG reg
-.if ptrwidth == 32
-  sw  x\reg, (\reg * 4)(sp)
-.else
+  # sw  x\reg, (\reg * 4)(sp) # RV32
   sd  x\reg, (\reg * 8)(sp)
-.endif
 .endm
 
 # macro to generate load instructions to pull given 'reg' register
 .macro PULL_REG reg
-.if ptrwidth == 32
-  lw  x\reg, (\reg * 4)(sp)
-.else
+  # lw  x\reg, (\reg * 4)(sp) # RV32
   ld  x\reg, (\reg * 8)(sp)
-.endif
 .endm
 
 .align 8
@@ -93,11 +87,8 @@ machine_irq_handler:
 
   # stack the interrupted code's sp as x2 (sp) in register block
   csrrs t0, mscratch, x0
-.if ptrwidth == 32
-  sw    t0, (2 * 4)(sp)
-.else
+  # sw  t0, (2 * 4)(sp) # RV32
   sd    t0, (2 * 8)(sp)
-.endif
 
   # right now mscratch is corrupt with the interrupted code's sp.
   # this means hypervisor functions relying on mscratch will break, so restore it.

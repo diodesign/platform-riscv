@@ -1,4 +1,4 @@
-# diosix RV32G/RV64G hypervisor low-level per-CPU core timer control
+# diosix RV64G hypervisor low-level per-CPU core timer control
 #
 # (c) Chris Williams, 2019.
 #
@@ -42,16 +42,17 @@ platform_timer_target:
   csrrc   t2, mhartid, x0   # t2 = heartid
   slli    t2, t2, 3         # t2 = hartid * 8 bytes (hartid * one 64-bit word)
   add     t1, t1, t2        # t1 = mtimecmp + hartid * 8 = address of this CPU's mtimecmp
-.if ptrwidth == 32
-  add     t1, t1, a2        # get final address of mtimecmp from CLINT base address in a2
-  li      t0, -1            # for RV32, manuals recommend setting all high bits first
-  sw      t0, 4(t1)
-  sw      a0, 0(t1)         # then write low 32-bit word
-  sw      a1, 4(t1)         # then the high 32-bit word
-.else
+
+  # for RV32 targets only
+  # add   t1, t1, a2        # get final address of mtimecmp from CLINT base address in a2
+  # li    t0, -1            # for RV32, manuals recommend setting all high bits first
+  # sw    t0, 4(t1)
+  # sw    a0, 0(t1)         # then write low 32-bit word
+  # sw    a1, 4(t1)         # then the high 32-bit word
+
   add     t1, t1, a1        # get final address of mtimecmp from CLINT base address in a1
   sd      a0, 0(t1)         # 64-bit CPUs can just do a single write
-.endif
+
   ret
 
 # read the 64-bit per-CPU timer trigger value
@@ -64,14 +65,15 @@ platform_timer_get_target:
   csrrc   t2, mhartid, x0   # t2 = heartid
   slli    t2, t2, 3         # t2 = hartid * 8 bytes (hartid * one 64-bit word)
   add     t1, t1, t2        # t1 = mtimecmp + hartid * 8 = address of this CPU's mtimecmp
-.if ptrwidth == 32
-  add     t1, t1, a0        # get final address of mtimecmp from CLINT base address in a0
-  lw      a0, 0(t1)         # read the low 32-bit word
-  lw      a1, 4(t1)         # read the high 32-bit word
-.else
+
+  # for RV32 targets only
+  # add   t1, t1, a0        # get final address of mtimecmp from CLINT base address in a0
+  # lw    a0, 0(t1)         # read the low 32-bit word
+  # lw    a1, 4(t1)         # read the high 32-bit word
+
   add     t1, t1, a0        # get final address of mtimecmp from CLINT base address in a0
   ld      a0, 0(t1)         # 64-bit CPUs can do a single 64-bit read
-.endif
+
   ret
 
 # return the CPU timer's latest value
@@ -80,16 +82,17 @@ platform_timer_get_target:
 #    on RV64: a0 = 64-bit value of timer register
 platform_timer_now:
   li  t0, mtime
-.if ptrwidth == 32
-  add t0, t0, a0                  # get final address of mtime from CLINT base address in a0
-  lw  a1, 4(t0)                   # 32-bit CPUs have to read hi then lo
-  lw  a0, 0(t0)
-  lw  t1, 4(t0)                   # re-read the high word again
-  bne a1, t1, platform_timer_now  # try again if a high-word rollover occurred
-.else
+
+  # for RV32 targets only
+  # add t0, t0, a0                  # get final address of mtime from CLINT base address in a0
+  # lw  a1, 4(t0)                   # 32-bit CPUs have to read hi then lo
+  # lw  a0, 0(t0)
+  # lw  t1, 4(t0)                   # re-read the high word again
+  # bne a1, t1, platform_timer_now  # try again if a high-word rollover occurred
+
   add t0, t0, a0                  # get final address of mtime from CLINT base address in a0
   ld  a0, 0(t0)                   # 64-bit CPUs can just read a whole double word
-.endif
+
   ret
 
 # enable the machine-level per-CPU incremental timer
