@@ -72,13 +72,14 @@ _start:
   # leave hardware interrupts disabled for now
   call      irq_early_init
 
-  # initialize basic settings
   # trap WFI used by supervisors so we can auto-yield to other capsules
   # works only if supported by the hardware platform
-  li        t1, 1 << 21 # bit 21 = TW (timewout wait)
-  csrrs     x0, mstatus, t1
-  li        t1, 1 << 29 # for some reason Qemu has TW in bit 29
-  csrrs     x0, mstatus, t1
+  #
+  # FIXME: guests run faster if we don't yield? see instructions.rs
+  # also Qemu 5.2.50 raises mcause 0x16 with TW set, which causes problems (?)
+  #
+  # li        t1, 1 << 21 # bit 21 = TW (timewout wait)
+  # csrrs     x0, mstatus, t1
 
   # boot CPU core (ID 0) needs to zero the BSS */
   la        t0, clear_bss_finished

@@ -169,7 +169,7 @@ pub fn dispatch(context: IRQContext) -> Option<IRQ>
         (IRQType::Interrupt, 8) => (IRQSeverity::NonFatal, IRQCause::UserInterrupt),
         (IRQType::Interrupt, 9) => (IRQSeverity::NonFatal, IRQCause::SupervisorInterrupt),
         (IRQType::Interrupt, 11) => (IRQSeverity::NonFatal, IRQCause::MachineInterrupt),
-        (_, _) => (IRQSeverity::NonFatal, IRQCause::Unknown),
+        (_, _) => (IRQSeverity::NonFatal, IRQCause::Unknown)
     };
 
     /* return structure describing this exception to

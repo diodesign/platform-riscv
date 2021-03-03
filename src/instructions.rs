@@ -63,11 +63,14 @@ pub fn emulate(_priv_mode: PrivilegeMode, context: &mut IRQContext) -> Emulation
         return EmulationResult::Success;
     }
 
-    /* catch WFI as a yield to other supervisor kernels */
+    /* catch WFI as a yield to other virtual cores.
+       FIXME: we don't actually trap WFI as guests seem to start and
+       run faster without lots of yields. maybe yield on N x WFI calls?
+       also Qemu 5.2.50 hangs the guest with mcause 0x16 if we trap WFI */
     if instruction == WFI_INST
     {
         /* TODO: actually make the vCPU ait for an interrupt? */
-        increment_epc(); /* go to next instuction on return */
+        increment_epc(); /* go to next instruction on return */
         return EmulationResult::Yield;
     }
 
