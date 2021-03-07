@@ -1,7 +1,7 @@
 [package]
 name = "platform"
 version = "0.0.1"
-authors = ["Chris Williams <diosix@tuta.io>"]
+authors = ["Chris Williams <chrisw@diosix.org>"]
 license = "MIT"
 edition = "2018"
 publish = false
