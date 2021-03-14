@@ -24,7 +24,7 @@ irq_early_init:
   la    t0, machine_irq_handler
   csrrw x0, mtvec, t0
 
-  # delegate most exceptions to the supervisor guest kernel
+  # delegate most exceptions to the supervisor capsule
   # so that it can deal with them direct. for a given exception,
   # bit = 1 to delegate, 0 = pass to the machine-level hypervisor 
   # 0xb1f3 = delegate all exceptions (0-15) except:
