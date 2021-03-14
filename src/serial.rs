@@ -11,12 +11,14 @@
 
 use alloc::string::String;
 use mmio_16550_uart;
+use mmio_sifive_uart;
 
 /* supported serial port controllers */
 #[derive(Debug)]
 enum Controllers
 {
-    NS16550a(mmio_16550_uart::UART)
+    NS16550a(mmio_16550_uart::UART),
+    SiFive(mmio_sifive_uart::UART)
 }
 
 /* define a standard serial port input/output device */
@@ -55,6 +57,23 @@ impl SerialPort
                     chip: Controllers::NS16550a(uart)
                 });
             }
+            else if compat_str.contains("sifive") == true
+            {
+                if let Ok(uart) = mmio_sifive_uart::UART::new(base)
+                {
+                    /* reject MMIO areas that are too small */
+                    if uart.size() > size
+                    {
+                        return None;
+                    }
+
+                    return Some(SerialPort
+                    {
+                        base, size, compat: compat.clone(),
+                        chip: Controllers::SiFive(uart)
+                    });
+                }
+            }
             else
             {
                 /* faild to create serial controller */
@@ -83,6 +102,11 @@ impl SerialPort
                 {
                     Ok(_) => (),
                     Err(_) => return false
+                },
+                Controllers::SiFive(c) => match c.send_byte(byte)
+                {
+                    Ok(_) => (),
+                    Err(_) => return false
                 }
             }
         }
@@ -99,7 +123,12 @@ impl SerialPort
             {
                 Ok(b) => Some(b),
                 Err(_) => return None
-            }   
+            },
+            Controllers::SiFive(c) => match c.read_byte()
+            {
+                Ok(b) => Some(b),
+                Err(_) => return None
+            }
         }
     }
 }

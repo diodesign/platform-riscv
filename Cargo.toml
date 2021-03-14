@@ -20,3 +20,6 @@ path = "../devicetree"
 
 [dependencies.mmio_16550_uart]
 path = "src/mmio_16550_uart"
+
+[dependencies.mmio_sifive_uart]
+path = "src/mmio_sifive_uart"

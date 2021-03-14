@@ -1,3 +1,6 @@
 [submodule "src/mmio_16550_uart"]
 	path = src/mmio_16550_uart
 	url = https://github.com/diodesign/mmio_16550_uart.git
+[submodule "src/mmio_sifive_uart"]
+	path = src/mmio_sifive_uart
+	url = https://github.com/diodesign/mmio_sifive_uart.git
