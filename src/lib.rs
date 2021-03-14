@@ -23,6 +23,9 @@ extern crate spin;
 /* needed for 16550-compatible UART support */
 extern crate mmio_16550_uart;
 
+/* needed for SiFive-compatible UART support */
+extern crate mmio_sifive_uart;
+
 /* expose architecture common code to platform-specific code */
 #[macro_use]
 pub mod serial;
