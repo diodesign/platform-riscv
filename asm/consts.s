@@ -12,8 +12,7 @@
 .endif
 
 # during interrupts and exceptions, reserve space for 32 registers, eight bytes wide
-# .equ  IRQ_REGISTER_FRAME_SIZE, (32 * 4)   # RV32
-.equ  IRQ_REGISTER_FRAME_SIZE,   (32 * 8)   # RV64
+.equ  IRQ_REGISTER_FRAME_SIZE,   (32 * 8)
 
 # the hypervisor is laid out as follows in physical memory on bootup, ascending:
 # (all addresses should be 4KB word aligned, and defined in the target ld script)
@@ -28,7 +27,7 @@
 #   .   page of private variables
 #   .   private heap space
 
-# describe per-CPU slab. each slab is (1 << 18) bytes in size = 256KB
+# describe per-CPU slab. each slab is (1 << 18) bytes in size
 # update ../src/physmem.rs PHYS_MEM_PER_CPU if HV_CPU_SLAB_SHIFT changes
 .equ HV_CPU_SLAB_SHIFT,         (18)
 .equ HV_CPU_SLAB_SIZE,          (1 << HV_CPU_SLAB_SHIFT)
