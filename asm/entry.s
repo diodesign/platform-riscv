@@ -38,6 +38,12 @@
 #    a1 = pointer to device tree
 # <= never returns
 _start:
+  # for now, only run on CPU cores that support at least supervisor mode
+  csrrs     t0, misa, x0
+  li        t1, 1 << 18     # bit 18 set in misa = S mode present
+  and       t0, t0, t1      # if it's not set, no S mode, so park the core
+  beq       x0, t0, infinite_loop
+
   # each core should grab a slab of memory starting from the end of the hypervisor.
   # in order to scale to many cores, not waste too much memory, and to cope with non-linear
   # CPU ID / hart ID, each core will take memory using an atomic counter.
@@ -45,10 +51,9 @@ _start:
   la        t1, cpu_core_id_counter
   li        t2, 1
   amoadd.w  t3, t2, (t1)
-  # t3 = counter just before we incremented it
-  # preserve t3 in a0 -- that's now our runtime-assigned CPU core ID
-  add       a0, t3, x0
-  
+  mv        a0, t3
+  # now a0 = runtime-assigned linear CPU core ID, counting from 0
+
   # use t3 this as a multiplier from the end of the hypervisor, using shifts to keep things easy
   la        t1, __hypervisor_end
   slli      t3, t3, HV_CPU_SLAB_SHIFT
@@ -97,9 +102,6 @@ clear_bss:
   la        t2, __bss_end
   bgeu      t1, t2, clear_bss_loop_end # avoid empty or malformed bss 
 clear_bss_loop:
-  # for rv32 targets only
-  # sw      x0, (t1)
-  # addi    t1, t1, 4
   sd        x0, (t1)
   addi      t1, t1, 8
   bltu      t1, t2, clear_bss_loop
@@ -122,9 +124,10 @@ infinite_loop:
   j         infinite_loop
 
 # variables
-.align 4
+.align 8
 cpu_core_id_counter:
 .word 0
 
+.align 8
 clear_bss_finished:
 .word 0
