@@ -31,7 +31,7 @@ SECTIONS
   }
 
   /* this needs to be zeroed */
-  __bss_start = .;
+  __bss_start = ALIGN(0x8);
   .bss : ALIGN(0x8)
   {
     *(.*bss*)
