@@ -57,28 +57,28 @@ impl SerialPort
                     chip: Controllers::NS16550a(uart)
                 });
             }
-            else if compat_str.contains("sifive") == true
+        }
+        else if compat_str.contains("sifive") == true
+        {
+            if let Ok(uart) = mmio_sifive_uart::UART::new(base)
             {
-                if let Ok(uart) = mmio_sifive_uart::UART::new(base)
+                /* reject MMIO areas that are too small */
+                if uart.size() > size
                 {
-                    /* reject MMIO areas that are too small */
-                    if uart.size() > size
-                    {
-                        return None;
-                    }
-
-                    return Some(SerialPort
-                    {
-                        base, size, compat: compat.clone(),
-                        chip: Controllers::SiFive(uart)
-                    });
+                    return None;
                 }
+
+                return Some(SerialPort
+                {
+                    base, size, compat: compat.clone(),
+                    chip: Controllers::SiFive(uart)
+                });
             }
-            else
-            {
-                /* faild to create serial controller */
-                return None;
-            }
+        }
+        else
+        {
+            /* faild to create serial controller */
+            return None;
         }
 
         /* failed to find compatible controller */
