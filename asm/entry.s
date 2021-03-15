@@ -39,6 +39,8 @@
 # <= never returns
 _start:
   # for now, only run on CPU cores that support at least supervisor mode
+  # some boards have a non-S-mode monitor core. there is high-level support
+  # for this though low-level work is needed to ensure these cores work properly
   csrrs     t0, misa, x0
   li        t1, 1 << 18     # bit 18 set in misa = S mode present
   and       t0, t0, t1      # if it's not set, no S mode, so park the core
