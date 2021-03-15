@@ -57,7 +57,7 @@ const PHYS_PMP_TOR: usize   = 1 << 3;
 
 /* each CPU has a fix memory overhead, allocated during boot, for its fixed heap,
 exception stack, private variables, etc */
-const PHYS_MEM_PER_CPU: usize = 1 << 18; /* see ../asm/const.s */
+const PHYS_MEM_PER_CPU: usize = 1 << 20; /* see ../asm/const.s */
 
 /* standardize types for passing around physical RAM addresses */
 pub type PhysMemBase = usize;

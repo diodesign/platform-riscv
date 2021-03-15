@@ -27,9 +27,9 @@
 #   .   page of private variables
 #   .   private heap space
 
-# describe per-CPU slab. each slab is (1 << 18) bytes in size
+# describe per-CPU slab
 # update ../src/physmem.rs PHYS_MEM_PER_CPU if HV_CPU_SLAB_SHIFT changes
-.equ HV_CPU_SLAB_SHIFT,         (18)
+.equ HV_CPU_SLAB_SHIFT,         (20) # total size of per-CPU slab = 1 << HV_CPU_SLAB_SHIFT
 .equ HV_CPU_SLAB_SIZE,          (1 << HV_CPU_SLAB_SHIFT)
 .equ HV_CPU_STACK_BASE,         (0)
 .equ HV_CPU_STACK_SIZE,         (128 * 1024)
