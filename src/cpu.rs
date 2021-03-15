@@ -374,7 +374,7 @@ impl CPUDescription
         TODO: Automate this list? */
         format!("{}", match read_csr!(marchid)
         {
-            0 =>  "Qemu/Unknown",
+            0 =>  "Qemu/SiFive/Unknown",
             1 =>  "Rocket",
             2 =>  "BOOM",
             3 =>  "Ariane",
@@ -392,6 +392,8 @@ impl CPUDescription
             15 => "C-Class",
             16 => "SweRV EL2",
             17 => "SweRV EH2",
+            18 => "SERV",
+            19 => "NEORV32",
             _ => "Unknown"
         })
     }
